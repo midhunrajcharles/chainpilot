@@ -1,0 +1,22 @@
+Glad to hear you’re happy with the progress! We are fully aligned on the Milestone 1 goals. Here are the technical specifics you requested:
+
+1. Database We are using PostgreSQL for the MVP. It provides the relational structure needed for the complex state tracking (Persona/Relationship engines) while relying on a robust connection pool for reliability.
+
+2. User States Implementation We are tracking detailed relational states for every user to drive the "engine" logic:
+
+Relationship Level: Tracking stages (Stranger → Deep) via a state machine.
+Emotional Metrics: Explicit scores for intimacy and warmth (0-100) that evolve based on interaction quality.
+Engagement: Tracking streak_days and last_interaction_at to trigger re-engagement loops.
+Personality Profiling: We maintain axis scores (e.g., secure_anxious, logical_emotional) to adapt the AI's tone to the specific user.
+3. Key Tables & Fields Overview
+
+users: Core identity linking to the Telegram ID.
+user_persona_state: Stores the fluid relationship variables (relationship_stage, intimacy_score, warmth_score).
+user_personality_axes: Stores the psychological profile of the user (-10 to +10 scales).
+messages: Complete chat log with a mood field to track the emotional context of every reply.
+memories: Dedicated table for extracted long-term facts/preferences (separate from raw chat logs).
+4. Constraints & Assumptions
+
+Platform: Strictly Telegram-only for this phase.
+Security: We are stripping personally identifiable info where possible, but storing full message content for context continuity.
+Latency: We are assuming standard HTTP webhook responsiveness; long-running LLM generation will be handled via asynchronous updates if generation exceeds Telegram's timeout (though for MVP, mostly synchronous).

@@ -1,0 +1,53 @@
+# Setting up PostgreSQL on Windows
+
+Since you don't have Docker installed, the best way is to use the official installer.
+
+## 1. Download & Install
+
+1. Go to the [PostgreSQL Download Page](https://www.enterprisedb.com/downloads/postgres-postgresql-downloads).
+2. Download the **Windows x86-64** installer (latest version, e.g., 16 or 17).
+3. Run the installer.
+    - **Defaults are fine** for most options.
+    - **IMPORTANT**: When asked for a **Password** for the database superuser (`postgres`), enter `password` (or whatever you set in your `.env` file).
+    - **Port**: Default is `5432`.
+
+## 2. Verify Installation
+
+1. Open the Start Menu and search for **"SQL Shell (psql)"**.
+2. Open it.
+3. Press **Enter** through the defaults (Server, Database, Port, Username).
+4. Enter the password you set during installation.
+5. You should see a prompt like `postgres=#`.
+
+## 3. Create the Database
+
+In the SQL Shell (`postgres=#`), type the following command and press Enter:
+
+```sql
+CREATE DATABASE ai_companion_mvp;
+```
+
+*(Don't forget the semicolon `;` at the end!)*
+
+Type `\q` and Enter to exit.
+
+## 4. Run the Backend
+
+Now your database is ready!
+
+**Fixing your previous error:**
+In your terminal, you were already in the `backend/` folder, but you tried to run `node backend/app.js` (which looks for `backend/backend/app.js`).
+
+**Correct Command:**
+
+```powershell
+# If you are in c:\...\ai-companion-mvp\backend>
+node app.js
+```
+
+**OR** go back to the root:
+
+```powershell
+cd ..
+node backend/app.js
+```

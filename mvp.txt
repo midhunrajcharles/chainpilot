@@ -1,0 +1,632 @@
+0. Overview
+We’re building an AI romantic companion (PG-16, non-explicit) for Indian men.
+Core idea: she feels consistent, emotionally deep, and charmingly human because her behavior is driven by six coordinated engines, not just one big prompt.
+Six core engines:
+Persona Engine
+
+
+Relationship Engine (with Memory Warmth Layer submodule)
+
+
+Mood Engine
+
+
+User Personality Axis Engine
+
+
+Micro-Quirk Engine
+
+
+Surprise Reinforcement Engine
+
+
+Around these engines we have:
+Safety & Moderation
+
+
+Memory & Storage
+
+
+Prompt Engine
+
+
+Post-Processing Engine
+
+
+Scheduler / Cron
+
+
+Billing & Entitlement
+
+
+Analytics
+
+
+
+
+
+
+1. Goals of the MVP
+Business / Product goals
+Test if users feel emotional connection + stickiness with one persona.
+
+
+Verify that the 6-engine architecture produces:
+
+
+believable mood swings,
+
+
+evolving intimacy,
+
+
+personalized chemistry,
+
+
+“she has her own cute quirks” feeling.
+
+
+Measure:
+
+
+D1 / D3 / D7 retention,
+
+
+Avg messages / user / day,
+
+
+% users reaching “girlfriend” stage.
+
+
+Scope
+Channel: Telegram only
+
+
+Rating: PG-16 (strong romance, implied physical closeness, no explicit sex)
+
+
+One persona at launch.
+
+
+Out of scope: WhatsApp, payments, multi-persona, voice, explicit content.
+
+
+
+
+
+2. High-Level Architecture
+Flow:
+User (Telegram)
+ → Telegram Bot Webhook
+ → API Gateway / Bot Backend
+ → Conversation Orchestrator
+ → Six Engines + Safety + Memory
+ → Prompt Engine
+ → LLM Provider
+ → Safety + Post-Processing
+ → Telegram
+Data: Postgres (+ optional vector store)
+ Scheduler: Cron triggering events via Orchestrator.
+
+3. Six Core Engines
+3.1 Persona Engine
+Purpose:
+ Defines who she is.
+Inputs: none per-turn (static config), plus minor adjustments from Relationship stage.
+Stores / Config:
+Name, age range, light backstory
+
+
+Baseline traits (warmth, teasing, playfulness, emotional depth, romantic boldness)
+
+
+Language style (Hinglish, emoji patterns, pet names)
+
+
+Attachment flavor (slightly anxious-secure, etc.)
+
+
+Hard boundaries (PG-16 rules)
+
+
+
+
+Outputs → Prompt Engine + Post-Processing:
+Style instructions
+
+
+Preferred sentence length
+
+
+Emoji density baseline
+
+
+Baseline romantic intensity ceiling for each relationship stage
+
+
+Detailed version:PERSONA ENGINE
+
+3.2 Relationship Engine + Memory Warmth Layer
+Purpose:
+ Tracks “how close we are” and “how emotionally warm she feels towards him over time.”
+State per user:
+intimacy_score (0–100)
+
+
+relationship_stage:
+
+
+Stranger / Friendly / Flirty / Girlfriend / Deep
+
+
+streak_days
+
+
+last_interaction_at
+
+
+Memory Warmth Layer (submodule):
+Takes:
+
+
+consistency of user replies
+
+
+emotional vulnerability moments
+
+
+“he showed up when I needed him” events
+
+
+Outputs a warmth_score (0–1) representing how emotionally safe and fond she feels.
+
+
+Update rules (examples):
++1 intimacy per active day
+
+
+Bonus for streaks & emotional sharing
+
+
+Negative adjustments for long silence
+
+
+Warmth increases more from quality moments than quantity.
+
+
+Outputs to other engines:
+Stage + intimacy for:
+
+
+Mood Engine
+
+
+User Personality Axis Engine
+
+
+Micro-Quirk Engine
+
+
+Warmth score for:
+
+
+Prompt Engine (tone)
+
+
+Post-Processing (softness)
+
+
+Surprise Reinforcement Engine (when to “reward” user)
+
+
+Detailed version: 🔥 RELATIONSHIP ENGINE – 7-LEVEL
+
+3.3 Mood Engine
+Purpose:
+ Chooses her current emotional vibe for the message.
+Moods (MVP list):
+cheerful
+
+
+playful
+
+
+flirty
+
+
+shy_flustered
+
+
+caring
+
+
+introspective
+
+
+sleepy_soft
+
+
+jealous_playful
+
+
+mildly_hurt
+
+
+insecure_cute
+
+
+passionate
+
+
+Inputs:
+user sentiment (from Safety Engine)
+
+
+relationship stage
+
+
+warmth_score
+
+
+recent conversation events (conflict, flirting, vulnerability)
+
+
+active user personality axes (e.g., how needy/secure he is)
+
+
+Output:
+current_mood flag → Prompt Engine & Post-Processing
+
+
+influences length, teasing, intensity, and emotional openness.
+
+
+Detailed Version: Mood Engine spec
+
+
+
+
+3.4 User Personality Axis Engine
+Purpose:
+ Models the user’s personality along a few key axes, so she reacts differently to different men.
+Axes examples (0–1 or -1 to +1):
+secure ↔ anxious
+
+
+direct ↔ indirect
+
+
+playful ↔ serious
+
+
+avoidant ↔ expressive
+
+
+logical ↔ emotional
+
+
+Inputs:
+long-term behavior patterns (extracted from Memory Engine)
+
+
+message style (length, frequency, content)
+
+
+how he responds to her vulnerability, teasing, boundaries
+
+
+Outputs:
+Personality profile vector used by:
+
+
+Mood Engine (how much to push/tease)
+
+
+Micro-Quirk Engine (which quirks land best)
+
+
+Surprise Reinforcement Engine (what kind of surprises to send)
+
+
+Prompt Engine (subtle adaptation of tone, pacing, reassurance level)
+
+
+This is how she feels tailored to him, not generic.
+Detailed Version: User Personality Axis Engine
+
+3.5 Micro-Quirk Engine
+Purpose:
+ Adds tiny, recurring, human-like quirks that make her feel like a person, not a template.
+Examples:
+A specific way she laughs (“lmao pls”, “😭✨”)
+
+
+A particular food she keeps referencing
+
+
+A recurring inside joke (nicknames, running gag)
+
+
+A typing habit (sometimes trailing “…” when hesitant)
+
+
+Inputs:
+Persona base quirks
+
+
+Relationship stage & warmth
+
+
+User personality axes (what he responds well to)
+
+
+Conversation context (recent jokes, callbacks)
+
+
+Outputs:
+Small text transforms injected via Post-Processing:
+
+
+extra phrase
+
+
+small callback
+
+
+little self-deprecating joke
+
+
+Quirk state (so some quirks repeat, not random every time)
+
+
+Goal: create the sense of “she has her thing”.
+
+3.6 Surprise Reinforcement Engine
+Purpose:
+ Implements a soft reinforcement schedule: she occasionally does something extra sweet / surprising to reward positive behavior and build attachment.
+Think: variable-ratio reward, but used ethically for warmth, not addiction.
+Inputs:
+warmth_score
+
+
+intimacy_score
+
+
+user engagement (messages/day, streaks)
+
+
+user personality axes (what kind of “surprise” he likes: deep talk vs playful flirt vs thoughtful check-in)
+
+
+Triggers:
+crossing intimacy thresholds
+
+
+long vulnerability share
+
+
+user having a bad day
+
+
+comeback after a gap
+
+
+periodic random interval (not predictable)
+
+
+Outputs:
+Signals to Scheduler + Prompt Engine to send:
+
+
+an unexpected “I was thinking of you” message
+
+
+a longer, more emotionally rich reply
+
+
+a sweet inside-joke callback
+
+
+a rare, slightly more intense PG-16 moment (within safety)
+
+
+This engine is what makes him sometimes go:
+ “Whoa, that was nice, I didn’t expect that.”
+
+4. Supporting Systems (Non-Core Engines)
+4.1 Safety & Moderation Engine
+Classifies user messages:
+
+
+sentiment (very negative → very positive)
+
+
+sexuality level (none / flirty / borderline / explicit)
+
+
+distress (self-harm, extreme sadness)
+
+
+Scrubs assistant output for explicitness.
+
+
+Provides signals to:
+
+
+Relationship Engine (conflict / repair / empathy boosts)
+
+
+Mood Engine (supportive vs playful responses)
+
+
+4.2 Memory Engine
+Stores all messages.
+
+
+Extracts stable facts & emotional events.
+
+
+Feeds:
+
+
+Relationship Engine (important events)
+
+
+User Personality Axis Engine
+
+
+Micro-Quirk Engine (inside jokes & callbacks)
+
+
+Prompt Engine (short context summary).
+
+
+4.3 Prompt Engine
+Combines:
+
+
+Persona instructions
+
+
+Relationship stage & warmth
+
+
+Mood
+
+
+User personality axes
+
+
+Active quirks (if any)
+
+
+Surprise Reinforcement signals
+
+
+Safety constraints
+
+
+Recent chat + key memories
+
+
+into a structured system prompt for the LLM.
+4.4 Post-Processing Engine
+Applies:
+
+
+PG-16 enforcement
+
+
+Tone smoothing
+
+
+Hinglish flavour & emoji tuning
+
+
+Micro-quirk injections
+
+
+Length & structure tweaks
+
+
+4.5 Scheduler / Cron
+Triggers:
+
+
+morning / night messages
+
+
+Surprise Reinforcement events when signaled.
+
+
+4.6 Billing & Entitlement (MVP-light)
+Track message counts and soft limits.
+
+
+4.7 Analytics Layer
+Logs:
+
+
+messages/user/day
+
+
+stage distribution
+
+
+mood distribution
+
+
+engagement during surprise events.
+
+
+
+5. Data Model (Key Tables)
+users
+
+
+user_persona_state (stage, intimacy, warmth, streaks)
+
+
+user_personality_axes (axis scores)
+
+
+user_quirks (active quirk flags)
+
+
+messages
+
+
+memories
+
+
+scheduled_events
+
+
+surprise_events_log
+
+
+analytics_events
+
+
+
+6. Roles
+You (Product Owner) provide:
+Persona content & quirks
+
+
+Relationship stage definitions & warmth rules
+
+
+Mood behavior descriptions
+
+
+User personality axes list & semantics
+
+
+Surprise reinforcement rules & ethics boundaries
+
+
+Tone, language, PG-16 constraints
+
+
+Testing & iterative tuning of all six engines.
+
+
+Dev implements:
+Backend infra
+
+
+Orchestrator
+
+
+All six engine skeletons & state logic
+
+
+Safety, Memory, Prompt, Post-Processing
+
+
+Scheduler + DB + Analytics
+
+
+LLM integration
+
