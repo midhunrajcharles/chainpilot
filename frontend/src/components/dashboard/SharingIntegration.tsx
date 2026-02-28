@@ -13,6 +13,7 @@ export default function SharingIntegration() {
   const [qrTransactionId, setQrTransactionId] = useState('');
   const [qrResult, setQrResult] = useState<any>(null);
   const [qrLoading, setQrLoading] = useState(false);
+  const [qrError, setQrError] = useState('');
 
   // Receipt State
   const [receiptForm, setReceiptForm] = useState({
@@ -21,6 +22,7 @@ export default function SharingIntegration() {
   });
   const [receiptResult, setReceiptResult] = useState<any>(null);
   const [receiptLoading, setReceiptLoading] = useState(false);
+  const [receiptError, setReceiptError] = useState('');
 
   // Social Share State
   const [socialForm, setSocialForm] = useState({
@@ -30,6 +32,7 @@ export default function SharingIntegration() {
   });
   const [socialResult, setSocialResult] = useState<any>(null);
   const [socialLoading, setSocialLoading] = useState(false);
+  const [socialError, setSocialError] = useState('');
 
   // Email State
   const [emailForm, setEmailForm] = useState({
@@ -41,23 +44,27 @@ export default function SharingIntegration() {
   });
   const [emailResult, setEmailResult] = useState<any>(null);
   const [emailLoading, setEmailLoading] = useState(false);
+  const [emailError, setEmailError] = useState('');
 
   const walletAddress = user?.wallet?.address || '';
 
   const handleGenerateQR = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!walletAddress || !qrTransactionId) return;
+    setQrError('');
+    if (!walletAddress) { setQrError('Please connect your wallet first.'); return; }
+    if (!qrTransactionId.trim()) { setQrError('Transaction ID is required.'); return; }
 
     setQrLoading(true);
+    setQrResult(null);
     try {
-      const result = await ChainPilotApiClient.sharing.generateQR(walletAddress, qrTransactionId);
+      const result = await ChainPilotApiClient.sharing.generateQR(walletAddress, qrTransactionId.trim());
       if (result.success) {
         setQrResult(result.data);
       } else {
-        console.error('QR generation failed:', result.error);
+        setQrError(result.error || 'QR code generation failed.');
       }
-    } catch (error) {
-      console.error('Error generating QR code:', error);
+    } catch (error: any) {
+      setQrError(error?.message || 'An unexpected error occurred.');
     } finally {
       setQrLoading(false);
     }
@@ -65,18 +72,20 @@ export default function SharingIntegration() {
 
   const handleGenerateReceipt = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!walletAddress) return;
+    setReceiptError('');
+    if (!walletAddress) { setReceiptError('Please connect your wallet first.'); return; }
 
     setReceiptLoading(true);
+    setReceiptResult(null);
     try {
-      const result = await ChainPilotApiClient.sharing.generateReceipt(walletAddress, receiptForm.transactionId, receiptForm.format);
+      const result = await ChainPilotApiClient.sharing.generateReceipt(walletAddress, receiptForm.transactionId.trim(), receiptForm.format);
       if (result.success) {
         setReceiptResult(result.data);
       } else {
-        console.error('Receipt generation failed:', result.error);
+        setReceiptError(result.error || 'Receipt generation failed.');
       }
-    } catch (error) {
-      console.error('Error generating receipt:', error);
+    } catch (error: any) {
+      setReceiptError(error?.message || 'An unexpected error occurred.');
     } finally {
       setReceiptLoading(false);
     }
@@ -84,18 +93,20 @@ export default function SharingIntegration() {
 
   const handleSocialShare = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!walletAddress) return;
+    setSocialError('');
+    if (!walletAddress) { setSocialError('Please connect your wallet first.'); return; }
 
     setSocialLoading(true);
+    setSocialResult(null);
     try {
       const result = await ChainPilotApiClient.sharing.createSocialShare(walletAddress, socialForm);
       if (result.success) {
         setSocialResult(result.data);
       } else {
-        console.error('Social share failed:', result.error);
+        setSocialError(result.error || 'Social share creation failed.');
       }
-    } catch (error) {
-      console.error('Error creating social share:', error);
+    } catch (error: any) {
+      setSocialError(error?.message || 'An unexpected error occurred.');
     } finally {
       setSocialLoading(false);
     }
@@ -103,25 +114,27 @@ export default function SharingIntegration() {
 
   const handleSendEmail = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!walletAddress) return;
+    setEmailError('');
+    if (!walletAddress) { setEmailError('Please connect your wallet first.'); return; }
 
     setEmailLoading(true);
+    setEmailResult(null);
     try {
       const emailData = {
         to: emailForm.to,
         subject: emailForm.subject,
         template: emailForm.template,
-        data: emailForm.template === 'custom' ? { html: emailForm.customData } : { transactionId: emailForm.transactionId }
+        data: emailForm.template === 'custom' ? { html: emailForm.customData } : { transactionId: emailForm.transactionId.trim() }
       };
       
       const result = await ChainPilotApiClient.sharing.sendEmail(walletAddress, emailData);
       if (result.success) {
         setEmailResult(result.data);
       } else {
-        console.error('Email sending failed:', result.error);
+        setEmailError(result.error || 'Failed to send email.');
       }
-    } catch (error) {
-      console.error('Error sending email:', error);
+    } catch (error: any) {
+      setEmailError(error?.message || 'An unexpected error occurred.');
     } finally {
       setEmailLoading(false);
     }
@@ -175,6 +188,11 @@ export default function SharingIntegration() {
             </h3>
             
             <form onSubmit={handleGenerateQR} className="space-y-4">
+              {qrError && (
+                <div className="px-4 py-3 bg-red-500/10 border border-red-400/30 rounded-xl text-red-400 text-sm">
+                  {qrError}
+                </div>
+              )}
               <div>
                 <label className="block text-slate-400 text-sm mb-2">Transaction ID</label>
                 <input
@@ -203,6 +221,11 @@ export default function SharingIntegration() {
             
             {qrResult ? (
               <div className="space-y-4">
+                {!qrResult.foundInDb && (
+                  <div className="px-4 py-2 bg-yellow-500/10 border border-yellow-400/30 rounded-xl text-yellow-400 text-xs">
+                    Transaction not found in database — QR code generated from the ID directly.
+                  </div>
+                )}
                 <div className="text-center">
                   <img 
                     src={qrResult.qrCode} 
@@ -252,6 +275,11 @@ export default function SharingIntegration() {
             </h3>
             
             <form onSubmit={handleGenerateReceipt} className="space-y-4">
+              {receiptError && (
+                <div className="px-4 py-3 bg-red-500/10 border border-red-400/30 rounded-xl text-red-400 text-sm">
+                  {receiptError}
+                </div>
+              )}
               <div>
                 <label className="block text-slate-400 text-sm mb-2">Transaction ID</label>
                 <input
@@ -351,6 +379,11 @@ export default function SharingIntegration() {
             </h3>
             
             <form onSubmit={handleSocialShare} className="space-y-4">
+              {socialError && (
+                <div className="px-4 py-3 bg-red-500/10 border border-red-400/30 rounded-xl text-red-400 text-sm">
+                  {socialError}
+                </div>
+              )}
               <div>
                 <label className="block text-slate-400 text-sm mb-2">Transaction ID</label>
                 <input
@@ -469,6 +502,11 @@ export default function SharingIntegration() {
             </h3>
             
             <form onSubmit={handleSendEmail} className="space-y-4">
+              {emailError && (
+                <div className="px-4 py-3 bg-red-500/10 border border-red-400/30 rounded-xl text-red-400 text-sm">
+                  {emailError}
+                </div>
+              )}
               <div>
                 <label className="block text-slate-400 text-sm mb-2">Recipient Email</label>
                 <input

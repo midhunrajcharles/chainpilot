@@ -66,25 +66,17 @@ router.post(
       // Step 3: Get AI explanation
       let aiExplanation;
       try {
-        aiExplanation = await explainVulnerabilities(
-          contractAddress,
-          riskReport.findings,
-          riskReport.riskScore,
-          analysisResult.isVerified
+        aiExplanation = await withTimeout(
+          explainVulnerabilities(
+            contractAddress,
+            riskReport.findings,
+            riskReport.riskScore,
+            analysisResult.isVerified
+          ),
+          Math.max(3000, Number(process.env.CONTRACT_ANALYZER_AI_TIMEOUT_MS || 12000))
         );
       } catch (error: any) {
-        // Missing API key is a configuration error — surface it to the caller
-        if (
-          error?.message === 'AI service not configured' ||
-          error?.message?.includes('No OpenAI') ||
-          error?.message?.includes('not configured')
-        ) {
-          return res.status(500).json({
-            success: false,
-            error: 'AI service not configured. Please add OPENAI_API_KEY to backend/.env',
-          });
-        }
-        // Other AI failures (rate limit, network) fall back gracefully
+        // Any AI failure (including missing API key) falls back gracefully
         console.error('AI explanation failed, using fallback:', error?.message);
         aiExplanation = {
           explanation: `Contract risk score: ${riskReport.riskScore}/100`,
@@ -291,3 +283,12 @@ router.get('/stats', async (req: Request, res: Response) => {
 });
 
 export default router;
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return await Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error('Timed out')), timeoutMs);
+    }),
+  ]);
+}

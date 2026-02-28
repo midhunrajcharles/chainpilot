@@ -224,7 +224,8 @@ router.put('/scheduled/:id',
     const scheduledTransaction = await ScheduledTransaction.findOne({
       _id: scheduledId,
       walletAddress: userWalletAddress,
-      status: 'scheduled'
+      status: 'scheduled',
+      processing: { $ne: true }
     });
 
     if (!scheduledTransaction) {
@@ -306,6 +307,75 @@ router.delete('/scheduled/:id',
     const response: ApiResponse = {
       success: true,
       message: 'Scheduled transaction cancelled successfully'
+    };
+
+    res.status(200).json(response);
+  })
+);
+
+// POST /api/transactions/scheduled/:id/execute
+// Description: Mark a scheduled transaction as sent (optionally store on-chain tx hash)
+router.post('/scheduled/:id/execute',
+  extractWalletAddress,
+  validateObjectId('id'),
+  asyncHandler(async (req: any, res: any) => {
+    const userWalletAddress = req.walletAddress;
+    const scheduledId = req.params.id;
+    const { executionTxHash } = req.body || {};
+
+    const scheduledTransaction = await ScheduledTransaction.findOne({
+      _id: scheduledId,
+      walletAddress: userWalletAddress,
+      status: 'scheduled'
+    });
+
+    if (!scheduledTransaction) {
+      return res.status(404).json({
+        success: false,
+        error: 'Scheduled transaction not found or already processed'
+      });
+    }
+
+    scheduledTransaction.status = 'sent';
+    scheduledTransaction.executedAt = new Date();
+    scheduledTransaction.processing = false;
+    scheduledTransaction.processingStartedAt = undefined;
+    if (executionTxHash) {
+      scheduledTransaction.executionTxHash = executionTxHash;
+    }
+    await scheduledTransaction.save();
+
+    let nextScheduledTransaction = null;
+    if (scheduledTransaction.recurring?.frequency) {
+      const nextDate = calculateNextScheduledDate(
+        scheduledTransaction.recurring.frequency,
+        scheduledTransaction.scheduledFor
+      );
+
+      const hasEndDate = !!scheduledTransaction.recurring.endDate;
+      const withinEndDate = !hasEndDate || nextDate <= new Date(scheduledTransaction.recurring.endDate as Date);
+
+      if (withinEndDate) {
+        nextScheduledTransaction = new ScheduledTransaction({
+          walletAddress: scheduledTransaction.walletAddress,
+          amount: scheduledTransaction.amount,
+          token: scheduledTransaction.token,
+          recipient: scheduledTransaction.recipient,
+          scheduledFor: nextDate,
+          recurring: scheduledTransaction.recurring,
+          status: 'scheduled'
+        });
+        await nextScheduledTransaction.save();
+      }
+    }
+
+    const response: ApiResponse = {
+      success: true,
+      data: {
+        executedTransaction: scheduledTransaction,
+        nextScheduledTransaction
+      },
+      message: 'Scheduled transaction sent successfully'
     };
 
     res.status(200).json(response);

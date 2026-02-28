@@ -7,8 +7,9 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Radar, Plus, Trash2, Play, AlertCircle, CheckCircle } from 'lucide-react';
-import { usePrivy } from '@privy-io/react-auth';
+import { Radar, Plus, Trash2, Play, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { isAddress } from 'ethers';
 import { toast } from 'sonner';
 import {
   getMonitors,
@@ -20,37 +21,59 @@ import {
 
 export default function MonitoringPanel() {
   const { user } = usePrivy();
+  const { wallets } = useWallets();
   const [monitors, setMonitors] = useState<Monitor[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [checkingMonitorId, setCheckingMonitorId] = useState<string | null>(null);
+  const [checkStatus, setCheckStatus] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newAddress, setNewAddress] = useState('');
+  const walletAddress = user?.wallet?.address || wallets?.[0]?.address;
   
   useEffect(() => {
-    if (user?.wallet?.address) {
-      loadMonitors();
+    if (walletAddress) {
+      loadMonitors(walletAddress);
+    } else {
+      setIsLoading(false);
     }
-  }, [user]);
+  }, [walletAddress]);
   
-  const loadMonitors = async () => {
-    if (!user?.wallet?.address) return;
+  const loadMonitors = async (address: string) => {
+    if (!address) return;
     
     try {
-      const data = await getMonitors(user.wallet.address, true);
+      const data = await getMonitors(address, true);
       setMonitors(data);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to load monitors:', error);
+      toast.error(error?.message || 'Failed to load monitors');
     } finally {
       setIsLoading(false);
     }
   };
   
   const handleAddMonitor = async () => {
-    if (!newAddress.trim() || !user?.wallet?.address) return;
+    const normalizedAddress = newAddress.trim();
+
+    if (!walletAddress) {
+      toast.error('Please connect your wallet first');
+      return;
+    }
+
+    if (!normalizedAddress) {
+      toast.error('Please enter a contract address');
+      return;
+    }
+
+    if (!isAddress(normalizedAddress)) {
+      toast.error('Please enter a valid contract address');
+      return;
+    }
     
     try {
       await createMonitor({
-        contractAddress: newAddress.trim(),
-        userAddress: user.wallet.address,
+        contractAddress: normalizedAddress,
+        userAddress: walletAddress,
         thresholds: {
           riskScoreIncrease: 20,
           checkIntervalMinutes: 5,
@@ -60,7 +83,7 @@ export default function MonitoringPanel() {
       toast.success('Monitor created successfully!');
       setNewAddress('');
       setShowAddForm(false);
-      loadMonitors();
+      loadMonitors(walletAddress);
     } catch (error: any) {
       toast.error(error.message || 'Failed to create monitor');
     }
@@ -70,23 +93,36 @@ export default function MonitoringPanel() {
     try {
       await deleteMonitor(monitorId);
       toast.success('Monitor deleted');
-      loadMonitors();
+      if (walletAddress) {
+        loadMonitors(walletAddress);
+      }
     } catch (error: any) {
       toast.error(error.message || 'Failed to delete monitor');
     }
   };
   
   const handleCheckNow = async (monitorId: string) => {
+    setCheckingMonitorId(monitorId);
+    setCheckStatus(null);
+
     try {
       const result = await triggerMonitorCheck(monitorId);
-      toast.success(`Check complete. ${result.newAlertsCount} new alerts.`);
-      loadMonitors();
+      const statusMessage = `Check complete. ${result.newAlertsCount} new alerts.`;
+      toast.success(statusMessage);
+      setCheckStatus(statusMessage);
+      if (walletAddress) {
+        void loadMonitors(walletAddress);
+      }
     } catch (error: any) {
-      toast.error(error.message || 'Check failed');
+      const errorMessage = error.message || 'Check failed';
+      toast.error(errorMessage);
+      setCheckStatus(errorMessage);
+    } finally {
+      setCheckingMonitorId(null);
     }
   };
   
-  if (!user?.wallet?.address) {
+  if (!walletAddress) {
     return (
       <div className="text-center py-12">
         <Radar className="w-16 h-16 mx-auto text-gray-500 mb-4" />
@@ -134,6 +170,12 @@ export default function MonitoringPanel() {
           </div>
         </motion.div>
       )}
+
+      {checkStatus && (
+        <div className="p-3 rounded-xl bg-white/5 border border-white/10 text-sm text-gray-300">
+          {checkStatus}
+        </div>
+      )}
       
       {isLoading ? (
         <div className="text-center py-12 text-gray-400">Loading monitors...</div>
@@ -172,10 +214,15 @@ export default function MonitoringPanel() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => handleCheckNow(monitor._id)}
+                    disabled={checkingMonitorId === monitor._id}
                     className="p-2 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 transition-colors"
                     title="Check now"
                   >
-                    <Play className="w-4 h-4" />
+                    {checkingMonitorId === monitor._id ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Play className="w-4 h-4" />
+                    )}
                   </button>
                   <button
                     onClick={() => handleDelete(monitor._id)}

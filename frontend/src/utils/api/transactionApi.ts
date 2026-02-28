@@ -46,6 +46,16 @@ export class TransactionApiClient extends BaseApiClient {
     return this.delete<void>(`/transactions/scheduled/${transactionId}`, walletAddress);
   }
 
+  static async executeScheduledTransaction(
+    walletAddress: string,
+    transactionId: string,
+    data?: {
+      executionTxHash?: string;
+    }
+  ): Promise<ApiResponse<Transaction>> {
+    return this.post<Transaction>(`/transactions/scheduled/${transactionId}/execute`, walletAddress, data || {});
+  }
+
   // Conditional Transactions
   static async getConditionalTransactions(walletAddress: string): Promise<ApiResponse<Transaction[]>> {
     return this.get<Transaction[]>('/transactions/conditional', walletAddress);

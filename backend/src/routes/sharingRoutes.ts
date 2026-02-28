@@ -2,11 +2,16 @@ import { Router } from 'express';
 import nodemailer from 'nodemailer';
 import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
-import { generateQRCode, generateShareUrl } from '../config/cloudinary';
 import { extractWalletAddress, validateRequiredFields } from '../middleware/authMiddleware';
 import { asyncHandler } from '../middleware/errorMiddleware';
 import { Transaction } from '../models/Transaction';
 import { ApiResponse } from '../types';
+
+// Build a shareable URL for a transaction (no Cloudinary dependency)
+const buildShareUrl = (transactionId: string): string => {
+  const base = process.env.FRONTEND_URL || 'http://localhost:3001';
+  return `${base}/dashboard/transaction/${transactionId}`;
+};
 
 const router = Router();
 
@@ -19,67 +24,61 @@ router.post('/generate-qr',
     const userWalletAddress = req.walletAddress;
     const { transactionId } = req.body;
 
-    // Find the transaction - handle both ObjectId and wallet address
-    let transaction;
-    if (transactionId.match(/^[0-9a-fA-F]{24}$/)) {
-      // It's a valid ObjectId
-      transaction = await Transaction.findOne({
-        _id: transactionId,
-        walletAddress: userWalletAddress
-      });
-    } else if (transactionId.match(/^0x[a-fA-F0-9]{40}$/)) {
-      // It's a wallet address, find by txHash or recipient
-      transaction = await Transaction.findOne({
-        $or: [
-          { txHash: transactionId },
-          { from: transactionId.toLowerCase() },
-          { to: transactionId.toLowerCase() }
-        ],
-        walletAddress: userWalletAddress
-      });
-    } else {
+    // Validate ID format
+    const isObjectId = /^[0-9a-fA-F]{24}$/.test(transactionId);
+    const isTxHash   = /^0x[a-fA-F0-9]{64}$/i.test(transactionId);
+    const isAddress  = /^0x[a-fA-F0-9]{40}$/i.test(transactionId);
+
+    if (!isObjectId && !isTxHash && !isAddress) {
       return res.status(400).json({
         success: false,
-        error: 'Invalid transaction ID format'
+        error: 'Invalid ID format. Provide a MongoDB ObjectId (24 hex chars), a transaction hash (0x + 64 hex chars), or a wallet address (0x + 40 hex chars).'
       });
     }
 
-    if (!transaction) {
-      return res.status(404).json({
-        success: false,
-        error: 'Transaction not found'
-      });
+    // Try to enrich with DB data — but DO NOT fail if not found
+    let transaction: any = null;
+    try {
+      if (isObjectId) {
+        transaction = await Transaction.findOne({ _id: transactionId, walletAddress: userWalletAddress });
+      } else if (isTxHash) {
+        transaction = await Transaction.findOne({ txHash: transactionId, walletAddress: userWalletAddress });
+      } else if (isAddress) {
+        transaction = await Transaction.findOne({
+          $or: [{ from: transactionId.toLowerCase() }, { to: transactionId.toLowerCase() }],
+          walletAddress: userWalletAddress
+        }).sort({ createdAt: -1 });
+      }
+    } catch (_) { /* ignore DB errors — QR gen continues */ }
+
+    // Build share URL
+    const shareUrl = buildShareUrl(transaction ? String(transaction._id) : transactionId);
+
+    // Build QR payload — use DB data when available, fall back to the raw ID
+    const qrData: Record<string, any> = { transactionId };
+    if (transaction) {
+      qrData.from    = transaction.from;
+      qrData.to      = transaction.to;
+      qrData.amount  = transaction.amount;
+      qrData.token   = transaction.token;
+      qrData.txHash  = transaction.txHash;
+      qrData.status  = transaction.status;
     }
+    qrData.shareUrl = shareUrl;
 
-    // Generate share URL
-    const shareUrl = generateShareUrl(transactionId);
-    
-    // Generate QR code data
-    const qrData = {
-      transactionId: transactionId,
-      from: transaction.from,
-      to: transaction.to,
-      amount: transaction.amount,
-      token: transaction.token,
-      txHash: transaction.txHash,
-      shareUrl: shareUrl
-    };
-
-    // Generate QR code as SVG
-    const qrCodeSvg = await QRCode.toString(JSON.stringify(qrData), {
-      type: 'svg',
-      width: 200,
-      margin: 2
+    // Generate QR code as base64 PNG data URL (no Cloudinary needed)
+    const qrCodeDataUrl = await QRCode.toDataURL(JSON.stringify(qrData), {
+      width: 300,
+      margin: 2,
+      color: { dark: '#000000', light: '#FFFFFF' }
     });
-
-    // Upload QR code to Cloudinary
-    const qrCodeUrl = await generateQRCode(qrCodeSvg);
 
     const response: ApiResponse = {
       success: true,
       data: {
-        qrCode: qrCodeUrl,
-        shareUrl: shareUrl
+        qrCode: qrCodeDataUrl,
+        shareUrl: shareUrl,
+        foundInDb: !!transaction
       }
     };
 
@@ -103,28 +102,30 @@ router.post('/generate-receipt',
       });
     }
 
-    // Find the transaction - handle both ObjectId and wallet address
+    // Find the transaction - handle ObjectId, txHash (66-char), and wallet address
     let transaction;
     if (transactionId.match(/^[0-9a-fA-F]{24}$/)) {
-      // It's a valid ObjectId
       transaction = await Transaction.findOne({
         _id: transactionId,
         walletAddress: userWalletAddress
       });
+    } else if (transactionId.match(/^0x[a-fA-F0-9]{64}$/)) {
+      transaction = await Transaction.findOne({
+        txHash: transactionId,
+        walletAddress: userWalletAddress
+      });
     } else if (transactionId.match(/^0x[a-fA-F0-9]{40}$/)) {
-      // It's a wallet address, find by txHash or recipient
       transaction = await Transaction.findOne({
         $or: [
-          { txHash: transactionId },
           { from: transactionId.toLowerCase() },
           { to: transactionId.toLowerCase() }
         ],
         walletAddress: userWalletAddress
-      });
+      }).sort({ createdAt: -1 });
     } else {
       return res.status(400).json({
         success: false,
-        error: 'Invalid transaction ID format'
+        error: 'Invalid ID format. Provide a MongoDB ObjectId (24 hex chars), a transaction hash (0x + 64 hex chars), or a wallet address (0x + 40 hex chars).'
       });
     }
 
@@ -220,11 +221,32 @@ router.post('/social-share',
       });
     }
 
-    // Find the transaction
-    const transaction = await Transaction.findOne({
-      _id: transactionId,
-      walletAddress: userWalletAddress
-    });
+    // Find the transaction - handle ObjectId, txHash, and wallet address
+    let transaction;
+    if (transactionId.match(/^[0-9a-fA-F]{24}$/)) {
+      transaction = await Transaction.findOne({
+        _id: transactionId,
+        walletAddress: userWalletAddress
+      });
+    } else if (transactionId.match(/^0x[a-fA-F0-9]{64}$/)) {
+      transaction = await Transaction.findOne({
+        txHash: transactionId,
+        walletAddress: userWalletAddress
+      });
+    } else if (transactionId.match(/^0x[a-fA-F0-9]{40}$/)) {
+      transaction = await Transaction.findOne({
+        $or: [
+          { from: transactionId.toLowerCase() },
+          { to: transactionId.toLowerCase() }
+        ],
+        walletAddress: userWalletAddress
+      }).sort({ createdAt: -1 });
+    } else {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid ID format. Provide a MongoDB ObjectId (24 hex chars), a transaction hash (0x + 64 hex chars), or a wallet address (0x + 40 hex chars).'
+      });
+    }
 
     if (!transaction) {
       return res.status(404).json({
@@ -233,8 +255,8 @@ router.post('/social-share',
       });
     }
 
-    // Generate share URL
-    const shareUrl = generateShareUrl(transactionId);
+    // Build share URL
+    const shareUrl = buildShareUrl(String(transaction._id));
     
     // Create platform-specific content
     let shareContent = '';

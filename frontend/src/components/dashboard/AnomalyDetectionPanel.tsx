@@ -1,6 +1,6 @@
 "use client";
 import { AnomalyApiClient, AnomalyEvent, AnomalyScanResult } from "@/utils/api/anomalyApi";
-import { usePrivy } from "@privy-io/react-auth";
+import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { useEffect, useState } from "react";
 import {
   FaCheckCircle,
@@ -12,6 +12,7 @@ import {
   FaTimesCircle,
   FaTrash,
 } from "react-icons/fa";
+import { toast } from "sonner";
 
 const SEVERITY_CONFIG: Record<string, { color: string; bg: string; icon: React.ReactNode; label: string }> = {
   critical: { color: "text-red-400", bg: "bg-red-500/10 border-red-500/30", icon: <FaTimesCircle />, label: "Critical" },
@@ -38,7 +39,8 @@ const ANOMALY_TYPE_LABELS: Record<string, string> = {
 
 export default function AnomalyDetectionPanel() {
   const { user } = usePrivy();
-  const walletAddress = user?.wallet?.address ?? "";
+  const { wallets } = useWallets();
+  const walletAddress = user?.wallet?.address || wallets?.[0]?.address || "";
 
   const [scanResult, setScanResult] = useState<AnomalyScanResult | null>(null);
   const [events, setEvents] = useState<AnomalyEvent[]>([]);
@@ -52,14 +54,28 @@ export default function AnomalyDetectionPanel() {
     if (walletAddress) loadEvents();
   }, [walletAddress]);
 
+  const normalizeSeverity = (severity: string) => severity?.toLowerCase?.() || "low";
+  const normalizeConfidence = (confidence: number) => (confidence > 1 ? confidence / 100 : confidence);
+
+  const normalizeEvent = (event: AnomalyEvent): AnomalyEvent => ({
+    ...event,
+    severity: normalizeSeverity(event.severity) as AnomalyEvent["severity"],
+    confidence: normalizeConfidence(event.confidence),
+  });
+
   const loadEvents = async () => {
     if (!walletAddress) return;
     setLoading(true);
     try {
       const res = await AnomalyApiClient.getEvents(walletAddress, { limit: 50 });
-      if (res.success && res.data) setEvents(res.data as AnomalyEvent[]);
+      if (res.success && res.data) {
+        setEvents((res.data as AnomalyEvent[]).map(normalizeEvent));
+      } else {
+        toast.error(res.error || "Failed to load anomaly events");
+      }
     } catch (err) {
       console.error("loadEvents error:", err);
+      toast.error("Failed to load anomaly events");
     } finally {
       setLoading(false);
     }
@@ -72,11 +88,19 @@ export default function AnomalyDetectionPanel() {
     try {
       const res = await AnomalyApiClient.scanWallet(walletAddress);
       if (res.success && res.data) {
-        setScanResult(res.data as AnomalyScanResult);
+        const payload = res.data as AnomalyScanResult;
+        setScanResult({
+          ...payload,
+          anomalies: (payload.anomalies || []).map(normalizeEvent),
+        });
+        toast.success("Live anomaly scan completed");
         await loadEvents(); // refresh event list after scan
+      } else {
+        toast.error(res.error || "Anomaly scan failed");
       }
     } catch (err) {
       console.error("runScan error:", err);
+      toast.error("Anomaly scan failed");
     } finally {
       setScanning(false);
     }
@@ -84,13 +108,21 @@ export default function AnomalyDetectionPanel() {
 
   const acknowledgeEvent = async (id: string) => {
     if (!walletAddress) return;
-    await AnomalyApiClient.acknowledge(walletAddress, id);
+    const res = await AnomalyApiClient.acknowledge(walletAddress, id);
+    if (!res.success) {
+      toast.error(res.error || "Failed to acknowledge event");
+      return;
+    }
     setEvents((prev) => prev.map((e) => (e._id === id ? { ...e, acknowledged: true } : e)));
   };
 
   const clearAcknowledged = async () => {
     if (!walletAddress) return;
-    await AnomalyApiClient.clearAcknowledged(walletAddress);
+    const res = await AnomalyApiClient.clearAcknowledged(walletAddress);
+    if (!res.success) {
+      toast.error(res.error || "Failed to clear acknowledged events");
+      return;
+    }
     setEvents((prev) => prev.filter((e) => !e.acknowledged));
   };
 
@@ -109,6 +141,7 @@ export default function AnomalyDetectionPanel() {
         <div>
           <h2 className="text-2xl font-bold text-white">Anomaly Detection</h2>
           <p className="text-slate-400 text-sm mt-1">AI-powered threat detection for your wallet</p>
+          <p className="text-slate-500 text-xs mt-1">Live mode: scans on-chain RPC activity + app transaction history</p>
         </div>
         <div className="flex items-center gap-2">
           {unreadCount > 0 && (
@@ -197,6 +230,20 @@ export default function AnomalyDetectionPanel() {
                   {scanResult.newAnomaliesFound} new issue{scanResult.newAnomaliesFound !== 1 ? "s" : ""} found
                 </span>
               </div>
+
+              {(scanResult.transactionsAnalyzed !== undefined || scanResult.dataSources) && (
+                <div className="text-xs text-slate-500 border border-white/10 bg-white/5 rounded-lg px-3 py-2">
+                  {scanResult.transactionsAnalyzed !== undefined && (
+                    <span>Transactions analyzed: {scanResult.transactionsAnalyzed}</span>
+                  )}
+                  {scanResult.dataSources && (
+                    <span>
+                      {scanResult.transactionsAnalyzed !== undefined ? ' • ' : ''}
+                      Sources — RPC: {scanResult.dataSources.onchainTransactions}, DB: {scanResult.dataSources.dbTransactions}
+                    </span>
+                  )}
+                </div>
+              )}
 
               {scanResult.anomalies.length === 0 ? (
                 <div className="flex items-center gap-3 p-4 bg-green-500/10 border border-green-500/30 rounded-xl">

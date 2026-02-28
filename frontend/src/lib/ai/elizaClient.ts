@@ -8,7 +8,10 @@
 // No polling needed – the agent response is returned directly in the 201 body.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ELIZA_BASE_URL = process.env.ELIZA_AGENT_URL || "http://localhost:3002";
+const ELIZA_BASE_URL =
+  process.env.ELIZA_AGENT_URL ||
+  process.env.NEXT_PUBLIC_ELIZA_AGENT_URL ||
+  "http://localhost:3003";
 
 // ─── Session cache (in-process, per userId) ──────────────────────────────────
 interface SessionEntry {
@@ -95,41 +98,41 @@ async function getOrCreateSession(userId: string): Promise<SessionEntry> {
   return entry;
 }
 
-// ─── Response text extraction ───────────────────────────────────────────────
-
-/**
- * Extract the response text from an ElizaOS message response.
- * ElizaOS v1.7 uses two response paths:
- *   1. agentResponse.text – the final LLM text (may be empty when actions fire)
- *   2. agentResponse.actionCallbacks.text – set when an action (CHECK_BALANCE, etc.) provides the response
- */
-function extractResponseText(data: any): string | null {
-  const agentResponse = data?.agentResponse;
-  if (!agentResponse) return null;
-
-  // Prefer the action callback text (populated when blockchain actions fire)
-  const callbackText = agentResponse?.actionCallbacks?.text;
-  if (callbackText && typeof callbackText === "string" && callbackText.trim()) {
-    return callbackText;
-  }
-
-  // Fall back to the direct LLM text
-  const directText =
-    agentResponse?.text ??
-    agentResponse?.content ??
-    (typeof agentResponse === "string" ? agentResponse : null);
-  if (directText && typeof directText === "string" && directText.trim()) {
-    return directText;
-  }
-
-  return null;
-}
-
 // ─── Main export ─────────────────────────────────────────────────────────────
 
 /**
- * Send a message to ChainPilot AI and return the agent's text response synchronously.
- * Uses ElizaOS v1.7 session API with `transport: "http"` for direct responses.
+ * Poll GET /sessions/:id/messages waiting for the agent's reply after a given timestamp.
+ * ElizaOS v1.6.x processes messages asynchronously – the POST returns the user
+ * message object; the agent response must be fetched by polling.
+ */
+async function pollForAgentReply(
+  sessionId: string,
+  afterMs: number,
+  timeoutMs = 20_000,
+  intervalMs = 600
+): Promise<string> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, intervalMs));
+    const r = await fetch(
+      `${ELIZA_BASE_URL}/api/messaging/sessions/${sessionId}/messages`,
+      { headers: { "Content-Type": "application/json" } }
+    );
+    if (!r.ok) continue;
+    const data = await r.json();
+    const msgs: any[] = data?.messages ?? [];
+    // Find the latest agent message created after the user sent the message
+    const agentMsg = msgs
+      .filter(m => m.isAgent === true && new Date(m.createdAt).getTime() > afterMs)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+    if (agentMsg?.content?.trim()) return agentMsg.content.trim();
+  }
+  throw new Error("ElizaOS agent did not respond within timeout");
+}
+
+/**
+ * Send a message to ChainPilot AI and return the agent's text response.
+ * Uses ElizaOS v1.6.x session API with async polling for the agent reply.
  *
  * @param message  User message text
  * @param userId   Stable identifier (wallet address)
@@ -139,13 +142,14 @@ export async function sendToElizaAgent(
   userId: string
 ): Promise<string> {
   const session = await getOrCreateSession(userId);
+  const sentAt = Date.now();
 
   const res = await fetch(
     `${ELIZA_BASE_URL}/api/messaging/sessions/${session.sessionId}/messages`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: `[wallet:${userId}]\n${message}`, transport: "http" }),
+      body: JSON.stringify({ content: `[wallet:${userId}]\n${message}` }),
     }
   );
 
@@ -154,38 +158,26 @@ export async function sendToElizaAgent(
     // Session expired or not found – evict cache and retry once with a new session
     if (res.status === 404 || res.status === 410) {
       sessionCache.delete(userId);
-      // Retry with fresh session
       const newSession = await getOrCreateSession(userId);
+      const retrySentAt = Date.now();
       const retryRes = await fetch(
         `${ELIZA_BASE_URL}/api/messaging/sessions/${newSession.sessionId}/messages`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content: `[wallet:${userId}]\n${message}`, transport: "http" }),
+          body: JSON.stringify({ content: `[wallet:${userId}]\n${message}` }),
         }
       );
       if (!retryRes.ok) {
         const retryErr = await retryRes.text().catch(() => retryRes.statusText);
         throw new Error(`ElizaOS session message retry → ${retryRes.status}: ${retryErr}`);
       }
-      const retryData = await retryRes.json();
-      const retryText = extractResponseText(retryData);
-      if (retryText) return retryText;
-      throw new Error("ElizaOS retry returned no agent response text");
+      return pollForAgentReply(newSession.sessionId, retrySentAt);
     }
     throw new Error(`ElizaOS session message → ${res.status}: ${err}`);
   }
 
-  const data = await res.json();
-
-  // The http transport returns the agent response directly in the body
-  // - agentResponse.text is the final LLM text (may be empty if an action handled the response)
-  // - agentResponse.actionCallbacks.text is the action's response text (populated when actions fire)
-  const text = extractResponseText(data);
-
-  if (text) return text;
-
-  throw new Error("ElizaOS returned no agent response text");
+  return pollForAgentReply(session.sessionId, sentAt);
 }
 
 /** Invalidate a user's session (call on chat reset or sign-out). */

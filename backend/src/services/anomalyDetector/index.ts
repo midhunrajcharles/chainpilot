@@ -9,6 +9,7 @@
 
 import { Transaction } from '../../models/Transaction';
 import { AnomalyEvent, AnomalyType, AnomalySeverity, IAnomalyEvent } from '../../models/AnomalyEvent';
+import { ethers } from 'ethers';
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -18,7 +19,13 @@ export interface AnomalyScanResult {
   walletAddress: string;
   scannedAt: Date;
   anomaliesFound: number;
-  anomalies: SavedAnomaly[];
+  newAnomaliesFound: number;
+  anomalies: IAnomalyEvent[];
+  transactionsAnalyzed: number;
+  dataSources: {
+    dbTransactions: number;
+    onchainTransactions: number;
+  };
   overallRisk: 'SAFE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   summary: string;
 }
@@ -46,13 +53,19 @@ export interface SavedAnomaly {
 export async function runAnomalyScan(walletAddress: string): Promise<AnomalyScanResult> {
   const wallet = walletAddress.toLowerCase();
 
-  // Fetch last 500 transactions involving this wallet
-  const txs = await Transaction.find({
+  // Fetch last 500 app-recorded transactions involving this wallet
+  const dbTxs = await Transaction.find({
     $or: [{ from: wallet }, { to: wallet }],
   })
     .sort({ createdAt: -1 })
     .limit(500)
     .lean();
+
+  // Fetch recent live on-chain transactions involving this wallet
+  const chainTxs = await fetchRecentOnchainTransactions(wallet);
+
+  // Merge + dedupe + normalize for detector engine
+  const txs = mergeAndNormalizeTransactions(dbTxs, chainTxs);
 
   const detected: SavedAnomaly[] = [];
 
@@ -79,16 +92,21 @@ export async function runAnomalyScan(walletAddress: string): Promise<AnomalyScan
   const now = Date.now();
   const cutoff = new Date(now - 24 * 60 * 60 * 1000);
   const persistedAnomalies: IAnomalyEvent[] = [];
+  let newlyCreatedCount = 0;
 
   for (const anomaly of detected) {
-    const exists = await AnomalyEvent.exists({
+    const existing = await AnomalyEvent.findOne({
       walletAddress: wallet,
       type: anomaly.type,
       createdAt: { $gte: cutoff },
     });
-    if (!exists) {
+
+    if (!existing) {
       const doc = await AnomalyEvent.create({ walletAddress: wallet, ...anomaly });
       persistedAnomalies.push(doc);
+      newlyCreatedCount++;
+    } else {
+      persistedAnomalies.push(existing);
     }
   }
 
@@ -98,7 +116,13 @@ export async function runAnomalyScan(walletAddress: string): Promise<AnomalyScan
     walletAddress: wallet,
     scannedAt: new Date(),
     anomaliesFound: detected.length,
-    anomalies: detected,
+    newAnomaliesFound: newlyCreatedCount,
+    anomalies: persistedAnomalies,
+    transactionsAnalyzed: txs.length,
+    dataSources: {
+      dbTransactions: dbTxs.length,
+      onchainTransactions: chainTxs.length,
+    },
     overallRisk,
     summary: buildSummary(detected, overallRisk),
   };
@@ -311,6 +335,104 @@ async function detectAfterHoursActivity(wallet: string, txs: any[]): Promise<Sav
     relatedTxHashes: afterHours.slice(0, 3).map((t) => t.txHash).filter(Boolean),
     relatedAddresses: [],
   };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Live chain ingestion
+// ────────────────────────────────────────────────────────────────────────────
+
+type NormalizedTx = {
+  from: string;
+  to: string;
+  amount: string;
+  txHash: string;
+  status: 'pending' | 'confirmed' | 'failed';
+  createdAt: Date;
+};
+
+function getAnomalyRpcUrl(): string {
+  return (
+    process.env.SOMNIA_RPC_URL ||
+    process.env.NEXT_PUBLIC_SOMNIA_RPC_URL ||
+    'https://rpc.sepolia.org'
+  );
+}
+
+async function fetchRecentOnchainTransactions(wallet: string): Promise<NormalizedTx[]> {
+  const blockRange = Math.max(50, parseInt(process.env.ANOMALY_SCAN_BLOCK_RANGE || '300', 10));
+
+  try {
+    const provider = new ethers.JsonRpcProvider(getAnomalyRpcUrl());
+    const latestBlock = await provider.getBlockNumber();
+    const startBlock = Math.max(0, latestBlock - blockRange);
+    const matches: NormalizedTx[] = [];
+
+    for (let blockNumber = latestBlock; blockNumber >= startBlock; blockNumber--) {
+      const block = await provider.getBlock(blockNumber, true);
+      if (!block || !block.transactions || block.transactions.length === 0) continue;
+
+      const timestamp = new Date(Number(block.timestamp) * 1000);
+
+      for (const tx of block.transactions as any[]) {
+        if (typeof tx === 'string') continue;
+
+        const from = tx?.from?.toLowerCase?.() || '';
+        const to = tx?.to?.toLowerCase?.() || '';
+        if (from !== wallet && to !== wallet) continue;
+
+        let status: 'pending' | 'confirmed' | 'failed' = 'confirmed';
+        try {
+          const receipt = await provider.getTransactionReceipt(String(tx.hash));
+          if (receipt && receipt.status === 0) {
+            status = 'failed';
+          }
+        } catch {
+          status = 'confirmed';
+        }
+
+        matches.push({
+          from,
+          to,
+          amount: ethers.formatEther(tx.value || 0n),
+          txHash: String(tx.hash).toLowerCase(),
+          status,
+          createdAt: timestamp,
+        });
+
+        if (matches.length >= 500) {
+          return matches;
+        }
+      }
+    }
+
+    return matches;
+  } catch (error) {
+    console.error('Live on-chain anomaly fetch failed, falling back to DB-only scan:', error);
+    return [];
+  }
+}
+
+function mergeAndNormalizeTransactions(dbTxs: any[], chainTxs: NormalizedTx[]): NormalizedTx[] {
+  const fromDb: NormalizedTx[] = dbTxs.map((tx) => ({
+    from: String(tx.from || '').toLowerCase(),
+    to: String(tx.to || '').toLowerCase(),
+    amount: String(tx.amount || '0'),
+    txHash: String(tx.txHash || '').toLowerCase(),
+    status: (tx.status || 'confirmed') as 'pending' | 'confirmed' | 'failed',
+    createdAt: tx.createdAt ? new Date(tx.createdAt) : new Date(),
+  }));
+
+  const byHash = new Map<string, NormalizedTx>();
+  for (const tx of [...chainTxs, ...fromDb]) {
+    if (!tx.txHash) continue;
+    if (!byHash.has(tx.txHash)) {
+      byHash.set(tx.txHash, tx);
+    }
+  }
+
+  return Array.from(byHash.values())
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .slice(0, 500);
 }
 
 // ────────────────────────────────────────────────────────────────────────────

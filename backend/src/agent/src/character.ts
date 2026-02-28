@@ -45,7 +45,9 @@ export const character: Character = {
     chainPilotPlugin,
   ],
   settings: {
-    secrets: {},
+    secrets: {
+      DEFAULT_MAX_TOKENS: '4096',
+    },
     avatar: 'https://elizaos.github.io/eliza-avatars/Eliza/portrait.png',
   },
   templates: {

@@ -8,6 +8,7 @@ import { SOMNIA_CONFIG, TOKEN_ADDRESSES } from "@/lib/blockchain/config";
 import { ethers } from "ethers";
 
 interface ScheduledTransaction {
+  _id?: string;
   id: string;
   amount: string;
   token: string;
@@ -18,6 +19,8 @@ interface ScheduledTransaction {
     endDate?: string;
   };
   status: string;
+  executionTxHash?: string;
+  executedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -29,6 +32,7 @@ export default function AdvancedTransactions() {
   const [error, setError] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<ScheduledTransaction | null>(null);
+  const [executingTransactionId, setExecutingTransactionId] = useState<string | null>(null);
   const isFetchingRef = useRef(false);
 
   // Form state
@@ -44,6 +48,8 @@ export default function AdvancedTransactions() {
   });
 
   const walletAddress = user?.wallet?.address || "";
+
+  const getTransactionId = (transaction: ScheduledTransaction) => transaction._id || transaction.id;
 
   const fetchTransactions = useCallback(async () => {
     if (isFetchingRef.current || !walletAddress) return;
@@ -145,7 +151,7 @@ const sendRealTransaction = async ({
   return tx.hash;
 };
 
-// === Replace your old handleCreateTransaction with this ===
+// Create schedule only (do not transfer immediately)
 const handleCreateTransaction = async (e: React.FormEvent) => {
   e.preventDefault();
   setError(null);
@@ -160,22 +166,6 @@ const handleCreateTransaction = async (e: React.FormEvent) => {
     const signer = await provider.getSigner();
     const userAddress = await signer.getAddress();
 
-    // 🔹 Send payment to AI Agent wallet using same sendRealTransaction logic
-    const AI_AGENT_WALLET = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
-    console.log("🚀 Sending transaction to Agent wallet...");
-    const txHash = await sendRealTransaction({
-      recipient: AI_AGENT_WALLET,
-      amount: formData.amount,
-      token: formData.token,
-    });
-
-    alert("Transaction sent! Waiting for confirmation...");
-
-    // Wait for confirmation
-    const receipt = await provider.waitForTransaction(txHash);
-    console.log("✅ Transaction confirmed:", receipt.transactionHash);
-
-    // 🔹 Save scheduled transaction to backend
     const payload = {
       amount: formData.amount,
       token: formData.token,
@@ -185,8 +175,6 @@ const handleCreateTransaction = async (e: React.FormEvent) => {
         formData.recurring.frequency && formData.recurring.frequency !== "none"
           ? formData.recurring
           : undefined,
-      paymentTxHash: txHash,
-      paidToAgent: true,
     };
 
     const response = await ChainPilotApiClient.transactions.createScheduledTransaction(
@@ -195,7 +183,7 @@ const handleCreateTransaction = async (e: React.FormEvent) => {
     );
 
     if (response.success) {
-      alert("✅ Schedule created successfully! Payment sent to Agent wallet.");
+      alert("✅ Schedule created successfully!");
       setShowCreateModal(false);
       setFormData({
         amount: "",
@@ -210,13 +198,54 @@ const handleCreateTransaction = async (e: React.FormEvent) => {
     }
   } catch (err: any) {
     console.error(err);
-    if (err.message?.includes("user rejected")) {
-      setError("Transaction rejected by user.");
-    } else {
-      setError(err.message || "Error sending transaction.");
-    }
+    setError(err.message || "Failed to create scheduled transaction.");
   }
 };
+
+  const handleExecuteNow = async (transaction: ScheduledTransaction) => {
+    if (!walletAddress) {
+      setError("Please connect wallet");
+      return;
+    }
+
+    const transactionId = getTransactionId(transaction);
+    if (!transactionId) {
+      setError("Invalid transaction id");
+      return;
+    }
+
+    setExecutingTransactionId(transactionId);
+    setError(null);
+
+    try {
+      const txHash = await sendRealTransaction({
+        recipient: transaction.recipient,
+        amount: transaction.amount,
+        token: transaction.token,
+      });
+
+      const executeResponse = await ChainPilotApiClient.transactions.executeScheduledTransaction(
+        walletAddress,
+        transactionId,
+        { executionTxHash: txHash }
+      );
+
+      if (!executeResponse.success) {
+        setError(executeResponse.error || "Transaction sent, but failed to update schedule status.");
+      }
+
+      await fetchTransactions();
+    } catch (err: any) {
+      console.error("Execute scheduled transaction error:", err);
+      if (err.message?.includes("user rejected")) {
+        setError("Execution rejected by user.");
+      } else {
+        setError(err.message || "Failed to execute scheduled transaction.");
+      }
+    } finally {
+      setExecutingTransactionId(null);
+    }
+  };
 
 
 
@@ -230,7 +259,13 @@ const handleCreateTransaction = async (e: React.FormEvent) => {
         recurring: formData.recurring.frequency ? formData.recurring : undefined,
       };
 
-      const response = await ChainPilotApiClient.transactions.updateScheduledTransaction(walletAddress, editingTransaction.id, payload);
+      const editingId = getTransactionId(editingTransaction);
+      if (!editingId) {
+        setError("Invalid transaction id");
+        return;
+      }
+
+      const response = await ChainPilotApiClient.transactions.updateScheduledTransaction(walletAddress, editingId, payload);
       
       if (response.success) {
         setEditingTransaction(null);
@@ -291,6 +326,9 @@ const handleCreateTransaction = async (e: React.FormEvent) => {
     switch (status) {
       case "scheduled":
         return "text-blue-400 bg-blue-500/20";
+      case "sent":
+      case "executed":
+        return "text-green-400 bg-green-500/20";
       case "pending":
         return "text-yellow-400 bg-yellow-500/20";
       case "completed":
@@ -300,6 +338,14 @@ const handleCreateTransaction = async (e: React.FormEvent) => {
       default:
         return "text-slate-400 bg-slate-500/20";
     }
+  };
+
+  const formatStatusLabel = (status: string) => {
+    if (status === "sent" || status === "executed") {
+      return "Sent";
+    }
+
+    return status.charAt(0).toUpperCase() + status.slice(1);
   };
 
   if (loading) {
@@ -347,7 +393,7 @@ const handleCreateTransaction = async (e: React.FormEvent) => {
       {/* Transactions Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {transactions.map((transaction) => (
-          <div key={transaction.id} className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 hover:border-white/30 transition-all duration-300">
+          <div key={getTransactionId(transaction) || transaction.recipient + transaction.scheduledFor} className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 hover:border-white/30 transition-all duration-300">
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl flex items-center justify-center">
@@ -371,7 +417,7 @@ const handleCreateTransaction = async (e: React.FormEvent) => {
                   <FaEdit className="text-slate-400 hover:text-white text-sm" />
                 </button>
                 <button
-                  onClick={() => handleDeleteTransaction(transaction._id)}
+                  onClick={() => handleDeleteTransaction(getTransactionId(transaction) || "")}
                   className="p-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/30 rounded-lg transition-all duration-300"
                   title="Delete transaction"
                 >
@@ -401,16 +447,20 @@ const handleCreateTransaction = async (e: React.FormEvent) => {
               <div className="flex items-center justify-between">
                 <span className="text-slate-400 text-sm">Status</span>
                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(transaction.status)}`}>
-                  {transaction.status}
+                  {formatStatusLabel(transaction.status)}
                 </span>
               </div>
             </div>
 
             <div className="mt-4 pt-4 border-t border-white/10">
               <div className="flex gap-2">
-                <button className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/30 rounded-lg text-white transition-all duration-300">
+                <button
+                  onClick={() => handleExecuteNow(transaction)}
+                  disabled={transaction.status !== "scheduled" || executingTransactionId === getTransactionId(transaction)}
+                  className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/30 rounded-lg text-white transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
                   <FaPlay className="text-sm" />
-                  Execute Now
+                  {executingTransactionId === getTransactionId(transaction) ? "Executing..." : "Execute Now"}
                 </button>
                 <button className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-slate-800/20 hover:bg-slate-700/40 border border-slate-600/30 hover:border-slate-500/50 rounded-lg text-slate-300 hover:text-white transition-all duration-300">
                   <FaPause className="text-sm" />

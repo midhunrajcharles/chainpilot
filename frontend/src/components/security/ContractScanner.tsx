@@ -8,7 +8,8 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Loader2, Shield, ExternalLink } from 'lucide-react';
-import { usePrivy } from '@privy-io/react-auth';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { isAddress } from 'ethers';
 import { toast } from 'sonner';
 import RiskMeter from './RiskMeter';
 import FlagBreakdown from './FlagBreakdown';
@@ -17,17 +18,26 @@ import { analyzeContract, ContractAnalysisResponse } from '../../utils/api/contr
 
 export default function ContractScanner() {
   const { user } = usePrivy();
+  const { wallets } = useWallets();
+  const walletAddress = user?.wallet?.address || wallets?.[0]?.address;
   const [contractAddress, setContractAddress] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<ContractAnalysisResponse['data'] | null>(null);
   
   const handleAnalyze = async () => {
-    if (!contractAddress.trim()) {
+    const normalizedAddress = contractAddress.trim();
+
+    if (!normalizedAddress) {
       toast.error('Please enter a contract address');
       return;
     }
+
+    if (!isAddress(normalizedAddress)) {
+      toast.error('Please enter a valid contract address');
+      return;
+    }
     
-    if (!user?.wallet?.address) {
+    if (!walletAddress) {
       toast.error('Please connect your wallet first');
       return;
     }
@@ -37,8 +47,8 @@ export default function ContractScanner() {
     
     try {
       const response = await analyzeContract({
-        contractAddress: contractAddress.trim(),
-        userAddress: user.wallet.address,
+        contractAddress: normalizedAddress,
+        userAddress: walletAddress,
         chainId: 11155111, // Sepolia testnet
       });
       

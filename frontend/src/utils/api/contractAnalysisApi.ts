@@ -70,13 +70,18 @@ export async function analyzeContract(
   try {
     const response = await axios.post(
       `${API_BASE_URL}/contracts/analyze`,
-      params
+      params,
+      { timeout: 45000 }
     );
     return response.data;
   } catch (error: any) {
     console.error('Contract analysis API error:', error);
+    const validationMessage = error.response?.data?.errors?.[0]?.msg;
     throw new Error(
-      error.response?.data?.error || 'Failed to analyze contract'
+      validationMessage ||
+      error.response?.data?.error ||
+      (error.code === 'ECONNABORTED' ? 'Contract analysis timed out. Please try again.' : '') ||
+      'Failed to analyze contract'
     );
   }
 }

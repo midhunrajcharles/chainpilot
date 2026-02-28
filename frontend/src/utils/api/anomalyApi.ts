@@ -5,7 +5,7 @@ export interface AnomalyEvent {
   _id: string;
   walletAddress: string;
   type: string;
-  severity: 'low' | 'medium' | 'high' | 'critical';
+  severity: 'low' | 'medium' | 'high' | 'critical' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   title: string;
   description: string;
   confidence: number;
@@ -24,7 +24,13 @@ export interface AnomalyScanResult {
   scannedAt: string;
   overallRisk: 'SAFE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   anomalies: AnomalyEvent[];
+  anomaliesFound?: number;
   newAnomaliesFound: number;
+  transactionsAnalyzed?: number;
+  dataSources?: {
+    dbTransactions: number;
+    onchainTransactions: number;
+  };
 }
 
 export interface PreTxCheckResult {
@@ -46,7 +52,7 @@ export class AnomalyApiClient extends BaseApiClient {
     const qs = new URLSearchParams();
     qs.set('wallet', walletAddress);
     if (params?.unread !== undefined) qs.set('unread', String(params.unread));
-    if (params?.severity) qs.set('severity', params.severity);
+    if (params?.severity) qs.set('severity', params.severity.toUpperCase());
     if (params?.limit) qs.set('limit', String(params.limit));
     return this.get<AnomalyEvent[]>(`/anomaly/events?${qs.toString()}`, walletAddress);
   }

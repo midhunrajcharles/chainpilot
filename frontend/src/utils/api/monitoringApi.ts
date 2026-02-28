@@ -67,8 +67,11 @@ export async function createMonitor(
     return response.data.data;
   } catch (error: any) {
     console.error('Create monitor API error:', error);
+    const validationMessage = error.response?.data?.errors?.[0]?.msg;
     throw new Error(
-      error.response?.data?.error || 'Failed to create monitor'
+      validationMessage ||
+      error.response?.data?.error ||
+      'Failed to create monitor'
     );
   }
 }
@@ -83,12 +86,16 @@ export async function getMonitors(
   try {
     const response = await axios.get(`${API_BASE_URL}/monitors`, {
       params: { userAddress, isActive },
+      timeout: 15000,
     });
     return response.data.data;
   } catch (error: any) {
     console.error('Get monitors API error:', error);
+    const validationMessage = error.response?.data?.errors?.[0]?.msg;
     throw new Error(
-      error.response?.data?.error || 'Failed to fetch monitors'
+      validationMessage ||
+      error.response?.data?.error ||
+      'Failed to fetch monitors'
     );
   }
 }
@@ -98,7 +105,9 @@ export async function getMonitors(
  */
 export async function getMonitor(monitorId: string): Promise<Monitor> {
   try {
-    const response = await axios.get(`${API_BASE_URL}/monitors/${monitorId}`);
+    const response = await axios.get(`${API_BASE_URL}/monitors/${monitorId}`, {
+      timeout: 15000,
+    });
     return response.data.data;
   } catch (error: any) {
     console.error('Get monitor API error:', error);
@@ -118,13 +127,18 @@ export async function triggerMonitorCheck(monitorId: string): Promise<{
 }> {
   try {
     const response = await axios.post(
-      `${API_BASE_URL}/monitors/${monitorId}/check`
+      `${API_BASE_URL}/monitors/${monitorId}/check`,
+      undefined,
+      { timeout: 45000 }
     );
     return response.data.data;
   } catch (error: any) {
     console.error('Trigger check API error:', error);
+    const validationMessage = error.response?.data?.errors?.[0]?.msg;
     throw new Error(
-      error.response?.data?.error || 'Failed to trigger monitor check'
+      validationMessage ||
+      error.response?.data?.error ||
+      (error.code === 'ECONNABORTED' ? 'Check request timed out. Try again.' : 'Failed to trigger monitor check')
     );
   }
 }
@@ -155,7 +169,9 @@ export async function updateMonitor(
  */
 export async function deleteMonitor(monitorId: string): Promise<void> {
   try {
-    await axios.delete(`${API_BASE_URL}/monitors/${monitorId}`);
+    await axios.delete(`${API_BASE_URL}/monitors/${monitorId}`, {
+      timeout: 15000,
+    });
   } catch (error: any) {
     console.error('Delete monitor API error:', error);
     throw new Error(

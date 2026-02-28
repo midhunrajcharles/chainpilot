@@ -2,12 +2,15 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ChainPilotApiClient } from "@/utils/api";
 import { usePrivy } from "@privy-io/react-auth";
+import { useWallets } from "@privy-io/react-auth";
 import { useState } from "react";
 import { FaBan, FaCheckCircle, FaExclamationTriangle, FaEye, FaShieldAlt, FaTimesCircle } from "react-icons/fa";
 
 export default function SecurityRisk() {
   const { user } = usePrivy();
+  const { wallets } = useWallets();
   const [activeTab, setActiveTab] = useState<'risk-assessment' | 'address-reputation' | 'scam-detection' | 'transaction-validation'>('risk-assessment');
+  const [actionError, setActionError] = useState<string | null>(null);
   
   // Risk Assessment State
   const [riskForm, setRiskForm] = useState({
@@ -42,21 +45,30 @@ export default function SecurityRisk() {
   const [validationResult, setValidationResult] = useState<any>(null);
   const [validationLoading, setValidationLoading] = useState(false);
 
-  const walletAddress = user?.wallet?.address || '';
+  const walletAddress = user?.wallet?.address || wallets?.[0]?.address || '';
 
   const handleRiskAssessment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!walletAddress) return;
+    setActionError(null);
+
+    if (!walletAddress) {
+      setActionError('Connect a wallet before running risk assessment.');
+      return;
+    }
 
     setRiskLoading(true);
     try {
       const result = await ChainPilotApiClient.security.assessRisk(walletAddress, riskForm);
-      if (result.success) {
+      if (result.success && result.data) {
         setRiskResult(result.data);
       } else {
+        setRiskResult(null);
+        setActionError(result.error || 'Risk assessment failed.');
         console.error('Risk assessment failed:', result.error);
       }
     } catch (error) {
+      setRiskResult(null);
+      setActionError(error instanceof Error ? error.message : 'Error assessing risk.');
       console.error('Error assessing risk:', error);
     } finally {
       setRiskLoading(false);
@@ -65,17 +77,31 @@ export default function SecurityRisk() {
 
   const handleAddressReputation = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!walletAddress || !reputationAddress) return;
+    setActionError(null);
+
+    if (!walletAddress) {
+      setActionError('Connect a wallet before checking reputation.');
+      return;
+    }
+
+    if (!reputationAddress) {
+      setActionError('Enter an address to check reputation.');
+      return;
+    }
 
     setReputationLoading(true);
     try {
       const result = await ChainPilotApiClient.security.getAddressReputation(walletAddress, reputationAddress);
-      if (result.success) {
+      if (result.success && result.data) {
         setReputationResult(result.data);
       } else {
+        setReputationResult(null);
+        setActionError(result.error || 'Address reputation check failed.');
         console.error('Address reputation failed:', result.error);
       }
     } catch (error) {
+      setReputationResult(null);
+      setActionError(error instanceof Error ? error.message : 'Error fetching address reputation.');
       console.error('Error fetching address reputation:', error);
     } finally {
       setReputationLoading(false);
@@ -84,17 +110,26 @@ export default function SecurityRisk() {
 
   const handleScamDetection = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!walletAddress) return;
+    setActionError(null);
+
+    if (!walletAddress) {
+      setActionError('Connect a wallet before scam detection.');
+      return;
+    }
 
     setScamLoading(true);
     try {
       const result = await ChainPilotApiClient.security.detectScam(walletAddress, scamForm);
-      if (result.success) {
+      if (result.success && result.data) {
         setScamResult(result.data);
       } else {
+        setScamResult(null);
+        setActionError(result.error || 'Scam detection failed.');
         console.error('Scam detection failed:', result.error);
       }
     } catch (error) {
+      setScamResult(null);
+      setActionError(error instanceof Error ? error.message : 'Error detecting scam.');
       console.error('Error detecting scam:', error);
     } finally {
       setScamLoading(false);
@@ -103,7 +138,12 @@ export default function SecurityRisk() {
 
   const handleTransactionValidation = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!walletAddress) return;
+    setActionError(null);
+
+    if (!walletAddress) {
+      setActionError('Connect a wallet before transaction validation.');
+      return;
+    }
 
     setValidationLoading(true);
     try {
@@ -111,12 +151,16 @@ export default function SecurityRisk() {
         ...validationForm,
         from: walletAddress
       });
-      if (result.success) {
+      if (result.success && result.data) {
         setValidationResult(result.data);
       } else {
+        setValidationResult(null);
+        setActionError(result.error || 'Transaction validation failed.');
         console.error('Transaction validation failed:', result.error);
       }
     } catch (error) {
+      setValidationResult(null);
+      setActionError(error instanceof Error ? error.message : 'Error validating transaction.');
       console.error('Error validating transaction:', error);
     } finally {
       setValidationLoading(false);
@@ -172,6 +216,12 @@ export default function SecurityRisk() {
           );
         })}
       </div>
+
+      {actionError && (
+        <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 text-red-300 text-sm">
+          {actionError}
+        </div>
+      )}
 
       {/* Risk Assessment Tab */}
       {activeTab === 'risk-assessment' && (

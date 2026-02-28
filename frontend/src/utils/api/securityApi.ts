@@ -2,6 +2,8 @@ import { BaseApiClient } from './base';
 import { RiskAssessment, AddressReputation, ScamDetection, TransactionValidation, ApiResponse } from '@/types/api';
 
 export class SecurityApiClient extends BaseApiClient {
+  protected static baseUrl = process.env.NEXT_PUBLIC_API_URL || '/api';
+
   static async assessRisk(
     walletAddress: string, 
     data: { address: string; amount: string; token: string }

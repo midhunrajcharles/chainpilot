@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { backendApi } from "@/lib/axios";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+function getBackendBaseUrl() {
+  return process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
+}
 
 export async function POST(request: NextRequest) {
   try {
-    const walletAddress = request.headers.get("walletAddress");
+    const walletAddress = request.headers.get("walletAddress") || request.headers.get("walletaddress");
     
     if (!walletAddress) {
       return NextResponse.json(
@@ -13,27 +19,45 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
+    const backendUrl = `${getBackendBaseUrl()}/api/security/risk-assessment`;
 
-    // Forward request to backend
-    const response = await backendApi.post('/security/risk-assessment', body, {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
+    const response = await fetch(backendUrl, {
+      method: "POST",
       headers: {
-        'walletAddress': walletAddress
-      }
+        "Content-Type": "application/json",
+        walletAddress,
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+      cache: "no-store",
     });
 
-    return NextResponse.json(response.data);
+    clearTimeout(timeout);
+
+    const text = await response.text();
+    let payload: any = { success: response.ok };
+    try {
+      payload = text ? JSON.parse(text) : payload;
+    } catch {
+      payload = {
+        success: response.ok,
+        error: text || "Unexpected backend response",
+      };
+    }
+
+    return NextResponse.json(payload, { status: response.status });
   } catch (error: any) {
     console.error("Error assessing risk:", error);
-    
-    if (error.response) {
-      return NextResponse.json(
-        { success: false, error: error.response.data.error || "Backend error occurred" },
-        { status: error.response.status }
-      );
-    }
-    
+
+    const message = error?.name === "AbortError"
+      ? "Risk assessment timed out while contacting backend"
+      : (error?.message || "Internal server error");
+
     return NextResponse.json(
-      { success: false, error: "Internal server error" },
+      { success: false, error: message },
       { status: 500 }
     );
   }

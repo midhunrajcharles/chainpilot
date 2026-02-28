@@ -24,6 +24,13 @@ const scheduledTransactionSchema = new Schema<IScheduledTransaction>({
     type: Date,
     required: true
   },
+  processing: {
+    type: Boolean,
+    default: false
+  },
+  processingStartedAt: {
+    type: Date
+  },
   recurring: {
     frequency: {
       type: String,
@@ -35,8 +42,15 @@ const scheduledTransactionSchema = new Schema<IScheduledTransaction>({
   },
   status: {
     type: String,
-    enum: ['scheduled', 'executed', 'cancelled'],
+    enum: ['scheduled', 'sent', 'executed', 'cancelled'],
     default: 'scheduled'
+  },
+  executionTxHash: {
+    type: String,
+    lowercase: true
+  },
+  executedAt: {
+    type: Date
   }
 }, {
   timestamps: { createdAt: true, updatedAt: false }
@@ -46,6 +60,7 @@ const scheduledTransactionSchema = new Schema<IScheduledTransaction>({
 scheduledTransactionSchema.index({ walletAddress: 1 });
 scheduledTransactionSchema.index({ scheduledFor: 1 });
 scheduledTransactionSchema.index({ status: 1 });
+scheduledTransactionSchema.index({ status: 1, processing: 1, scheduledFor: 1 });
 scheduledTransactionSchema.index({ walletAddress: 1, status: 1 });
 
 export const ScheduledTransaction = mongoose.model<IScheduledTransaction>('ScheduledTransaction', scheduledTransactionSchema);

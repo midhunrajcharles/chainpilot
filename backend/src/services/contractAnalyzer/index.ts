@@ -30,7 +30,8 @@ export async function fetchContractBytecode(
 ): Promise<string> {
   try {
     const provider = new ethers.JsonRpcProvider(rpcUrl);
-    const bytecode = await provider.getCode(address);
+    const timeoutMs = Math.max(1500, Number(process.env.CONTRACT_ANALYZER_RPC_TIMEOUT_MS || 8000));
+    const bytecode = await withTimeout(provider.getCode(address), timeoutMs);
     
     if (bytecode === '0x' || bytecode === '0x0') {
       throw new Error('No contract found at this address');
@@ -51,10 +52,23 @@ export async function fetchContractSource(
   chainId: number,
   explorerApiKey?: string
 ): Promise<ContractFetchResult> {
-  const bytecode = await fetchContractBytecode(
-    address,
-    getDefaultRpcUrl(chainId)
-  );
+  const rpcUrls = getRpcUrls(chainId);
+  let lastError: any = null;
+  let bytecode = '';
+
+  for (const rpcUrl of rpcUrls) {
+    try {
+      bytecode = await fetchContractBytecode(address, rpcUrl);
+      break;
+    } catch (error: any) {
+      lastError = error;
+      continue;
+    }
+  }
+
+  if (!bytecode) {
+    throw new Error(lastError?.message || 'Failed to fetch bytecode from all RPC endpoints');
+  }
   
   // For now, return unverified result
   // In production, integrate with Etherscan/Blockscout API
@@ -379,4 +393,39 @@ function getDefaultRpcUrl(chainId: number): string {
   };
   
   return RPC_URLS[chainId] || RPC_URLS[11155111];
+}
+
+function getRpcUrls(chainId: number): string[] {
+  const rpcMap: Record<number, string[]> = {
+    11155111: [
+      process.env.SOMNIA_RPC_URL || '',
+      'https://ethereum-sepolia-rpc.publicnode.com',
+      'https://sepolia.drpc.org',
+      'https://rpc.ankr.com/eth_sepolia',
+      'https://rpc.sepolia.org',
+    ],
+    1: [
+      process.env.ETHEREUM_RPC_URL || '',
+      'https://eth.llamarpc.com',
+      'https://ethereum-rpc.publicnode.com',
+      'https://eth.drpc.org',
+    ],
+    137: [
+      process.env.POLYGON_RPC_URL || '',
+      'https://polygon-rpc.com',
+      'https://polygon-bor-rpc.publicnode.com',
+    ],
+  };
+
+  const selected = rpcMap[chainId] || rpcMap[11155111];
+  return Array.from(new Set(selected.filter((url) => url && url.trim().length > 0)));
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return await Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error('RPC request timed out')), timeoutMs);
+    }),
+  ]);
 }

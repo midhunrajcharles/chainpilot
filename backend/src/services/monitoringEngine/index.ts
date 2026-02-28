@@ -8,6 +8,7 @@ import { ethers } from 'ethers';
 import { analyzeContract } from '../contractAnalyzer';
 import { generateRiskReport } from '../riskEngine';
 import { explainAlert } from '../aiEngine';
+import ContractMonitor from '../../models/ContractMonitor';
 
 export interface Monitor {
   id: string;
@@ -156,7 +157,9 @@ async function runMonitoringCycle() {
 /**
  * Check individual monitor
  */
-async function checkMonitor(monitor: Monitor) {
+async function checkMonitor(monitor: Monitor): Promise<Alert[]> {
+  const alertsBefore = monitor.alertHistory.length;
+
   try {
     // Run contract analysis
     const analysisResult = await analyzeContract(
@@ -234,9 +237,31 @@ async function checkMonitor(monitor: Monitor) {
     // Update last checked time
     monitor.lastChecked = new Date();
     activeMonitors.set(monitor.id, monitor);
+
+    const newAlerts = monitor.alertHistory.slice(alertsBefore);
+
+    const update: any = {
+      $set: {
+        lastChecked: monitor.lastChecked,
+        lastRiskScore: riskReport.riskScore,
+      },
+    };
+
+    if (newAlerts.length > 0) {
+      update.$push = {
+        alertHistory: {
+          $each: newAlerts,
+          $slice: -100,
+        },
+      };
+    }
+
+    await ContractMonitor.findByIdAndUpdate(monitor.id, update);
+    return newAlerts;
     
   } catch (error: any) {
     console.error(`Monitor check failed for ${monitor.contractAddress}:`, error.message);
+    return [];
   }
 }
 
@@ -269,10 +294,13 @@ async function triggerAlert(
   
   // Generate AI explanation for alert
   try {
-    const aiExplanation = await explainAlert(
-      monitor.contractAddress,
-      alertData.type,
-      alertData.message
+    const aiExplanation = await withTimeout(
+      explainAlert(
+        monitor.contractAddress,
+        alertData.type,
+        alertData.message
+      ),
+      Math.max(2000, Number(process.env.MONITOR_ALERT_AI_TIMEOUT_MS || 8000))
     );
     alert.details.aiExplanation = aiExplanation;
   } catch (error) {
@@ -312,51 +340,56 @@ async function checkLargeTransfers(
   chainId: number,
   threshold: string
 ): Promise<any[]> {
-  try {
-    const rpcUrl = getRpcUrl(chainId);
-    const provider = new ethers.JsonRpcProvider(rpcUrl);
-    
-    // Get recent blocks (last 100 blocks)
-    const currentBlock = await provider.getBlockNumber();
-    const fromBlock = currentBlock - 100;
-    
-    // ERC20 Transfer event signature
-    const transferTopic = ethers.id('Transfer(address,address,uint256)');
-    
-    const logs = await provider.getLogs({
-      address: contractAddress,
-      topics: [transferTopic],
-      fromBlock,
-      toBlock: 'latest',
-    });
-    
-    const thresholdBN = BigInt(threshold);
-    const largeTransfers: any[] = [];
-    
-    for (const log of logs) {
-      try {
-        // Decode transfer amount (data field)
-        const amount = BigInt(log.data);
-        
-        if (amount >= thresholdBN) {
-          largeTransfers.push({
-            txHash: log.transactionHash,
-            blockNumber: log.blockNumber,
-            amount: amount.toString(),
-            from: '0x' + log.topics[1].slice(26),
-            to: '0x' + log.topics[2].slice(26),
-          });
+  const rpcUrls = getRpcUrls(chainId);
+
+  for (const rpcUrl of rpcUrls) {
+    try {
+      const provider = new ethers.JsonRpcProvider(rpcUrl);
+
+      // Get recent blocks (last 100 blocks)
+      const currentBlock = await provider.getBlockNumber();
+      const fromBlock = currentBlock - 100;
+
+      // ERC20 Transfer event signature
+      const transferTopic = ethers.id('Transfer(address,address,uint256)');
+
+      const logs = await provider.getLogs({
+        address: contractAddress,
+        topics: [transferTopic],
+        fromBlock,
+        toBlock: 'latest',
+      });
+
+      const thresholdBN = BigInt(threshold);
+      const largeTransfers: any[] = [];
+
+      for (const log of logs) {
+        try {
+          // Decode transfer amount (data field)
+          const amount = BigInt(log.data);
+
+          if (amount >= thresholdBN) {
+            largeTransfers.push({
+              txHash: log.transactionHash,
+              blockNumber: log.blockNumber,
+              amount: amount.toString(),
+              from: '0x' + log.topics[1].slice(26),
+              to: '0x' + log.topics[2].slice(26),
+            });
+          }
+        } catch (error) {
+          // Skip invalid logs
         }
-      } catch (error) {
-        // Skip invalid logs
       }
+
+      return largeTransfers;
+    } catch {
+      continue;
     }
-    
-    return largeTransfers;
-  } catch (error: any) {
-    console.error('Failed to check large transfers:', error.message);
-    return [];
   }
+
+  console.error('Failed to check large transfers: all RPC endpoints failed');
+  return [];
 }
 
 /**
@@ -371,11 +404,7 @@ export async function triggerImmediateCheck(
     throw new Error('Monitor not found');
   }
   
-  const alertsBefore = monitor.alertHistory.length;
-  
-  await checkMonitor(monitor);
-  
-  const newAlerts = monitor.alertHistory.slice(alertsBefore);
+  const newAlerts = await checkMonitor(monitor);
   
   return {
     success: true,
@@ -391,14 +420,39 @@ function generateAlertId(): string {
 }
 
 /**
- * Get RPC URL for chain
+ * Get RPC URLs for chain (in priority order)
  */
-function getRpcUrl(chainId: number): string {
-  const RPC_URLS: Record<number, string> = {
-    11155111: process.env.SOMNIA_RPC_URL || 'https://rpc.sepolia.org',
-    1: process.env.ETHEREUM_RPC_URL || 'https://eth.llamarpc.com',
-    137: process.env.POLYGON_RPC_URL || 'https://polygon-rpc.com',
+function getRpcUrls(chainId: number): string[] {
+  const chainRpcMap: Record<number, string[]> = {
+    11155111: [
+      process.env.SOMNIA_RPC_URL || '',
+      'https://ethereum-sepolia-rpc.publicnode.com',
+      'https://sepolia.drpc.org',
+      'https://rpc.ankr.com/eth_sepolia',
+      'https://rpc.sepolia.org',
+    ],
+    1: [
+      process.env.ETHEREUM_RPC_URL || '',
+      'https://eth.llamarpc.com',
+      'https://ethereum-rpc.publicnode.com',
+      'https://eth.drpc.org',
+    ],
+    137: [
+      process.env.POLYGON_RPC_URL || '',
+      'https://polygon-rpc.com',
+      'https://polygon-bor-rpc.publicnode.com',
+    ],
   };
-  
-  return RPC_URLS[chainId] || RPC_URLS[11155111];
+
+  const selected = chainRpcMap[chainId] || chainRpcMap[11155111];
+  return Array.from(new Set(selected.filter((value) => value && value.trim().length > 0)));
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return await Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error('Timed out')), timeoutMs);
+    }),
+  ]);
 }

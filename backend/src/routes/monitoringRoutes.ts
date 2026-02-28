@@ -223,16 +223,6 @@ router.post('/:id/check', async (req: Request, res: Response) => {
     // Trigger immediate check
     const result = await triggerImmediateCheck(id);
 
-    // Update monitor with new alerts
-    if (result.alerts.length > 0) {
-      for (const alert of result.alerts) {
-        await monitor.addAlert(alert);
-      }
-    }
-
-    monitor.lastChecked = new Date();
-    await monitor.save();
-
     res.json({
       success: true,
       data: {

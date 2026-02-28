@@ -30,6 +30,7 @@ import multiChainRoutes from './routes/multiChainRoutes';
 
 // Import monitoring engine
 import { startMonitoringEngine, loadActiveMonitors } from './services/monitoringEngine';
+import { startScheduledExecutor } from './services/scheduledExecutor';
 import ContractMonitor from './models/ContractMonitor';
 
 // Load environment variables
@@ -138,6 +139,14 @@ async function initializeMonitoringEngine() {
   }
 }
 
+function initializeScheduledExecutor() {
+  try {
+    startScheduledExecutor();
+  } catch (error) {
+    console.error('⚠️  Failed to initialize scheduled auto executor:', error);
+  }
+}
+
 // Start server
 app.listen(PORT, async () => {
   console.log(`🚀 ChainPilot AI Backend running on port ${PORT}`);
@@ -147,6 +156,7 @@ app.listen(PORT, async () => {
   
   // Initialize monitoring engine after server starts
   await initializeMonitoringEngine();
+  initializeScheduledExecutor();
 });
 
 export default app;

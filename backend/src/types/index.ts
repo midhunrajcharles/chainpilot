@@ -74,11 +74,15 @@ export interface IScheduledTransaction extends Document {
   token: string;
   recipient: string;
   scheduledFor: Date;
+  processing?: boolean;
+  processingStartedAt?: Date;
   recurring?: {
     frequency: 'daily' | 'weekly' | 'monthly';
     endDate?: Date;
   };
-  status: 'scheduled' | 'executed' | 'cancelled';
+  status: 'scheduled' | 'sent' | 'executed' | 'cancelled';
+  executionTxHash?: string;
+  executedAt?: Date;
   createdAt: Date;
 }
 
