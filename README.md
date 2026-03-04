@@ -178,7 +178,7 @@ CORS_ORIGIN=http://localhost:3000
 - "Show my balance"
 - "Send 10 ETH to all 'Family' contacts"
 
-## 🏗 Project Structure
+## Project Structure
 
 ```
 ChainPilot AI/
@@ -201,7 +201,7 @@ ChainPilot AI/
 
 
 
-## 🔗 API Endpoints
+## API Endpoints
 
 ### User Management
 - `GET /api/user/profile` - Get user profile
