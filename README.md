@@ -5,7 +5,7 @@
 
 Combining natural-language transaction interfaces with **autonomous smart contract security analysis**, ChainPilot AI provides comprehensive vulnerability detection, risk scoring, AI-powered explanations, transaction simulation, and continuous contract monitoring — all powered by GPT-4o and advanced blockchain analysis.
 
-### 🎯 **What Makes ChainPilot AI Different**
+###  **What Makes ChainPilot AI Different**
 - **AI Security Analyst**: GPT-4o powered vulnerability explanations in plain English
 - **Transaction Simulation**: Preview risks before executing any transaction
 - **Autonomous Monitoring**: Set-and-forget contract surveillance with alert system
@@ -13,9 +13,9 @@ Combining natural-language transaction interfaces with **autonomous smart contra
 - **Bytecode Analysis**: Deep inspection without requiring source code
 - **Production-Grade Architecture**: Enterprise service layer, comprehensive error handling
 
-## 🚀 Features
+## Features
 
-### 🛡️ **NEW: Security & Risk Analysis**
+###  **NEW: Security & Risk Analysis**
 1. **Smart Contract Security Scanner**
    - Bytecode pattern detection (reentrancy, selfdestruct, delegatecall, tx.origin)
    - Source code analysis (13+ vulnerability patterns)
@@ -104,7 +104,7 @@ Combining natural-language transaction interfaces with **autonomous smart contra
 - **Auto-complete**: "Complete your sentence..."
 - **Recent Transactions**: "Repeat last transaction?"
 
-## 🛠 Tech Stack
+##  Tech Stack
 
 ### Frontend
 - **Next.js 15** - React framework
@@ -127,7 +127,7 @@ Combining natural-language transaction interfaces with **autonomous smart contra
 - **PDFKit** - PDF generation
 - **QRCode** - QR code generation
 
-## 📦 Installation
+##  Installation
 
 ### Frontend Setup
 ```bash
@@ -165,7 +165,7 @@ EMAIL_PASS=your_email_pass
 CORS_ORIGIN=http://localhost:3000
 ```
 
-## 🎯 How to Use
+##  How to Use
 
 1. **Connect your wallet** using the button in the top right
 2. **Type or speak a command** (e.g., "Send 50 ETH to Alice")
@@ -200,20 +200,7 @@ ChainPilot AI/
 └── README.md
 ```
 
-## 🎥 Demo Video
 
-Watch a full demo here: [Loom Demo Video](https://www.loom.com/share/aabf4d44adc94fcfb8c1ebf3d33d5044?sid=2294e122-09e7-437d-8c05-d95cc3b590a9)
-
-## 🏆 For Judges
-
-- The app is **fully functional** on desktop and mobile
-- **Voice input works** in all modern browsers
-- All **edge cases** (offline, unsupported browser) are handled gracefully
-- **Complete backend API** with 50+ endpoints for all features
-- **Database schemas** for users, contacts, teams, transactions, and more
-- **Real-time notifications** and subscription management
-- **Advanced security** features and risk assessment
-- Please refer to the [Demo Video](https://www.loom.com/share/aabf4d44adc94fcfb8c1ebf3d33d5044?sid=2294e122-09e7-437d-8c05-d95cc3b590a9) for a walkthrough
 
 ## 🔗 API Endpoints
 
@@ -280,15 +267,15 @@ Watch a full demo here: [Loom Demo Video](https://www.loom.com/share/aabf4d44adc
 - `GET /api/health` - Health check endpoint
 - `GET /api/health/metrics` - Performance metrics
 
-## 🤝 Contributing
+##  Contributing
 
 Contributions are welcome! Please open an issue or submit a pull request.
 
-## 📄 License
+##  License
 
 MIT License - see LICENSE file for details
 
-## 🆘 Support
+##  Support
 
 For questions, reach out via GitHub Issues or the hackathon Discord.
 
