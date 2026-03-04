@@ -1,5 +1,4 @@
 # ChainPilot AI - Autonomous Web3 Security Agent
-<img src="./chainpilot.png">
 
 **ChainPilot AI** is an enterprise-grade AI-powered Web3 security and automation platform built for the Somnia Testnet.
 
