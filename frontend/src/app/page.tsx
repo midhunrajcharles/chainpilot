@@ -6,7 +6,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
-import { FaBolt, FaChartLine, FaClock, FaMobileAlt, FaQrcode, FaRobot, FaSearch, FaShieldAlt, FaUsers } from "react-icons/fa";
+import { FaBolt, FaChartLine, FaClock, FaGlobe, FaQrcode, FaRobot, FaSearch, FaShieldAlt, FaUsers } from "react-icons/fa";
 
 export default function Home() {
   const { authenticated } = usePrivy();
@@ -38,11 +38,6 @@ export default function Home() {
           }`}
         >
           <div className="flex items-center gap-3">
-            <div className="relative">
-              <div className="w-10 h-10 bg-transparent border border-[#C6A75E]/30 rounded-xl flex items-center justify-center">
-                <FaRobot className="text-[#C6A75E] text-lg" />
-              </div>
-            </div>
             <div>
               <h1 className="text-xl text-[#F8F6F2] tracking-widest" style={{fontFamily:'var(--font-display,Georgia,serif)',fontWeight:300}}>
                 ChainPilot AI
@@ -71,17 +66,17 @@ export default function Home() {
               <div className="mb-8">
                 <h1 className="text-5xl md:text-7xl lg:text-8xl mb-8" style={{fontFamily:'var(--font-display,Georgia,serif)',fontWeight:300,letterSpacing:'0.05em',lineHeight:'1.1'}}>
                   <span className="text-[#F8F6F2]">
-                    The Future of
+                    ChainPilot AI —
                   </span>
                   <br />
                   <span className="bg-gradient-to-r from-[#C6A75E] via-[#E8D5A3] to-[#C6A75E] bg-clip-text text-transparent">
-                    DeFi Management
+                    Your DeFi Control Centre
                   </span>
                 </h1>
                 <p className="text-lg md:text-xl text-[#B9B4AA] max-w-2xl mx-auto leading-relaxed" style={{fontWeight:300,letterSpacing:'0.01em'}}>
-                  Experience the power of AI-driven cryptocurrency management with ChainPilot AI. 
-                  Seamlessly manage your digital assets, execute smart transactions, and navigate 
-                  the DeFi ecosystem with intelligent automation.
+                  One AI-powered dashboard to manage wallets, execute smart transactions,
+                  monitor contracts, and detect threats — across every chain you use.
+                  Connect your wallet and take full control in seconds.
                 </p>
               </div>
               
@@ -121,7 +116,7 @@ export default function Home() {
                 </h2>
                 <div className="luxury-divider max-w-xs mx-auto"></div>
                 <p className="text-[#8A857E] max-w-2xl mx-auto mt-6" style={{fontWeight:300}}>
-                  Everything you need to manage your DeFi portfolio with AI-powered intelligence
+                  Six integrated tools — each solving a real problem DeFi users face every day.
                 </p>
               </div>
 
@@ -134,8 +129,9 @@ export default function Home() {
                   <h3 className="text-lg text-[#F8F6F2] mb-4" style={{fontFamily:'var(--font-display,Georgia,serif)',fontWeight:400,letterSpacing:'0.03em'}}>AI Chat Assistant</h3>
                   <div className="h-px bg-gradient-to-r from-[#C6A75E]/20 to-transparent mb-4"></div>
                   <p className="text-[#8A857E] leading-relaxed text-sm" style={{fontWeight:300}}>
-                    Interact with your DeFi portfolio using natural language. Execute transactions, 
-                    check balances, and get insights through conversational AI.
+                    <strong className="text-[#B9B4AA] font-normal">Send tokens and manage contacts without leaving the chat.</strong>{" "}
+                    Type or speak naturally — ChainPilot AI parses your intent, resolves contact names
+                    to wallet addresses, and executes transactions after your explicit confirmation.
                   </p>
                 </div>
 
@@ -144,11 +140,12 @@ export default function Home() {
                   <div className="w-14 h-14 bg-transparent border border-[#C6A75E]/20 rounded-xl flex items-center justify-center mb-6 group-hover:border-[#C6A75E]/50 transition-all duration-500">
                     <FaChartLine className="text-[#C6A75E] text-xl" />
                   </div>
-                  <h3 className="text-lg text-[#F8F6F2] mb-4" style={{fontFamily:'var(--font-display,Georgia,serif)',fontWeight:400,letterSpacing:'0.03em'}}>Advanced Analytics</h3>
+                  <h3 className="text-lg text-[#F8F6F2] mb-4" style={{fontFamily:'var(--font-display,Georgia,serif)',fontWeight:400,letterSpacing:'0.03em'}}>Portfolio Analytics</h3>
                   <div className="h-px bg-gradient-to-r from-[#C6A75E]/20 to-transparent mb-4"></div>
                   <p className="text-[#8A857E] leading-relaxed text-sm" style={{fontWeight:300}}>
-                    Get comprehensive insights into your portfolio performance, spending patterns, 
-                    and market trends with real-time analytics.
+                    <strong className="text-[#B9B4AA] font-normal">See exactly where your capital is and how it performs.</strong>{" "}
+                    Real-time breakdowns of balances, transaction history, gas spend, and risk exposure —
+                    so you make decisions based on data, not guesswork.
                   </p>
                 </div>
 
@@ -160,8 +157,9 @@ export default function Home() {
                   <h3 className="text-lg text-[#F8F6F2] mb-4" style={{fontFamily:'var(--font-display,Georgia,serif)',fontWeight:400,letterSpacing:'0.03em'}}>Smart Transactions</h3>
                   <div className="h-px bg-gradient-to-r from-[#C6A75E]/20 to-transparent mb-4"></div>
                   <p className="text-[#8A857E] leading-relaxed text-sm" style={{fontWeight:300}}>
-                    Schedule payments, set up conditional transactions, and automate your DeFi 
-                    operations with intelligent transaction management.
+                    <strong className="text-[#B9B4AA] font-normal">Schedule, automate, and batch transactions without writing code.</strong>{" "}
+                    Set time-triggered or condition-triggered payments — the system handles execution,
+                    retries, and confirmation tracking automatically.
                   </p>
                 </div>
 
@@ -170,11 +168,12 @@ export default function Home() {
                   <div className="w-14 h-14 bg-transparent border border-[#C6A75E]/20 rounded-xl flex items-center justify-center mb-6 group-hover:border-[#C6A75E]/50 transition-all duration-500">
                     <FaUsers className="text-[#C6A75E] text-xl" />
                   </div>
-                  <h3 className="text-lg text-[#F8F6F2] mb-4" style={{fontFamily:'var(--font-display,Georgia,serif)',fontWeight:400,letterSpacing:'0.03em'}}>Team Collaboration</h3>
+                  <h3 className="text-lg text-[#F8F6F2] mb-4" style={{fontFamily:'var(--font-display,Georgia,serif)',fontWeight:400,letterSpacing:'0.03em'}}>Team Workspaces</h3>
                   <div className="h-px bg-gradient-to-r from-[#C6A75E]/20 to-transparent mb-4"></div>
                   <p className="text-[#8A857E] leading-relaxed text-sm" style={{fontWeight:300}}>
-                    Create teams, manage shared wallets, and collaborate on DeFi strategies 
-                    with multi-signature support and approval workflows.
+                    <strong className="text-[#B9B4AA] font-normal">Share wallets and coordinate DeFi operations across your team.</strong>{" "}
+                    Create workspaces, assign members, and set spending policies —
+                    every team transaction is logged and requires explicit approval.
                   </p>
                 </div>
 
@@ -183,24 +182,26 @@ export default function Home() {
                   <div className="w-14 h-14 bg-transparent border border-[#C6A75E]/20 rounded-xl flex items-center justify-center mb-6 group-hover:border-[#C6A75E]/50 transition-all duration-500">
                     <FaShieldAlt className="text-[#C6A75E] text-xl" />
                   </div>
-                  <h3 className="text-lg text-[#F8F6F2] mb-4" style={{fontFamily:'var(--font-display,Georgia,serif)',fontWeight:400,letterSpacing:'0.03em'}}>Security & Risk</h3>
+                  <h3 className="text-lg text-[#F8F6F2] mb-4" style={{fontFamily:'var(--font-display,Georgia,serif)',fontWeight:400,letterSpacing:'0.03em'}}>Contract Security Scanner</h3>
                   <div className="h-px bg-gradient-to-r from-[#C6A75E]/20 to-transparent mb-4"></div>
                   <p className="text-[#8A857E] leading-relaxed text-sm" style={{fontWeight:300}}>
-                    Advanced security features including risk assessment, scam detection, 
-                    and transaction validation to protect your assets.
+                    <strong className="text-[#B9B4AA] font-normal">Every transaction is screened before it leaves your wallet.</strong>{" "}
+                    The firewall analyses contract bytecode, detects rug‑pull patterns, and assigns a
+                    risk score — blocking dangerous interactions automatically.
                   </p>
                 </div>
 
                 {/* Mobile Optimized */}
                 <div className="bg-white/[0.02] backdrop-blur-xl border border-[#C6A75E]/10 rounded-2xl p-8 hover:border-[#C6A75E]/25 transition-all duration-500 group">
                   <div className="w-14 h-14 bg-transparent border border-[#C6A75E]/20 rounded-xl flex items-center justify-center mb-6 group-hover:border-[#C6A75E]/50 transition-all duration-500">
-                    <FaMobileAlt className="text-[#C6A75E] text-xl" />
+                    <FaGlobe className="text-[#C6A75E] text-xl" />
                   </div>
-                  <h3 className="text-lg text-[#F8F6F2] mb-4" style={{fontFamily:'var(--font-display,Georgia,serif)',fontWeight:400,letterSpacing:'0.03em'}}>Mobile Optimised</h3>
+                  <h3 className="text-lg text-[#F8F6F2] mb-4" style={{fontFamily:'var(--font-display,Georgia,serif)',fontWeight:400,letterSpacing:'0.03em'}}>Multi-Chain Portfolio</h3>
                   <div className="h-px bg-gradient-to-r from-[#C6A75E]/20 to-transparent mb-4"></div>
                   <p className="text-[#8A857E] leading-relaxed text-sm" style={{fontWeight:300}}>
-                    Access your DeFi portfolio anywhere with our fully responsive design 
-                    and mobile-optimized interface.
+                    <strong className="text-[#B9B4AA] font-normal">One view for every chain — Ethereum, Polygon, BNB, Arbitrum, and more.</strong>{" "}
+                    Live native balances pulled directly from each chain's RPC, with
+                    zero third-party custody and full self-sovereign control.
                   </p>
                 </div>
               </div>
@@ -228,8 +229,8 @@ export default function Home() {
                   </div>
                 </div>
                 <p className="text-[#8A857E] max-w-md text-sm" style={{fontWeight:300,lineHeight:'1.8'}}>
-                  Empowering users with intelligent DeFi management through AI-driven automation 
-                  and advanced analytics.
+                  ChainPilot AI is a self-custodial DeFi management platform. Your keys stay in your
+                  wallet. No code or funds are stored server-side.
                 </p>
               </div>
               
