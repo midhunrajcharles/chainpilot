@@ -280,6 +280,5 @@ For questions, reach out via GitHub Issues or the hackathon Discord.
 
 ---
 
-**ChainPilot AI** - Powering the future of AI-driven crypto transactions 🚀
+**ChainPilot AI** - Powering the future of AI-driven crypto transactions 
 
-Built for the **Somnia AI Hackathon 2025**
