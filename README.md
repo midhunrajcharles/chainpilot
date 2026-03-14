@@ -182,22 +182,42 @@ CORS_ORIGIN=http://localhost:3000
 
 ```
 ChainPilot AI/
-├── frontend/                 # Next.js frontend application
+├── frontend/                   # Next.js frontend application
 │   ├── src/
-│   │   ├── app/             # App router pages
-│   │   ├── components/       # React components
-│   │   ├── lib/            # Utilities and configurations
-│   │   └── hooks/          # Custom React hooks
-│   └── package.json
-├── backend/                  # Node.js backend API
+│   │   ├── app/                # App Router entry points and layouts
+│   │   ├── components/         # Reusable UI building blocks
+│   │   ├── lib/                # Shared helpers, configs, schema definitions
+│   │   └── hooks/              # Custom React hooks (Privy, wallet state, etc.)
+│   ├── public/                 # Static assets served by Next.js
+│   ├── package.json            # Frontend scripts and dependencies
+│   └── tsconfig.json           # Frontend TypeScript configuration
+├── backend/                    # Node.js backend API
 │   ├── src/
-│   │   ├── routes/         # API route handlers
-│   │   ├── models/         # Mongoose schemas
-│   │   ├── middleware/     # Express middleware
-│   │   └── config/         # Database and service configs
-│   └── package.json
-└── README.md
+│   │   ├── routes/             # Express route handlers
+│   │   ├── models/             # Mongoose schemas and interfaces
+│   │   ├── middleware/         # Auth, logging, firewall, and error middleware
+│   │   ├── config/             # Database, blockchain, and third-party configs
+│   │   └── services/           # Business logic modules (AI, blockchain, etc.)
+│   ├── package.json            # Backend scripts and dependencies
+│   └── tsconfig.json           # Backend TypeScript configuration
+├── DEPLOYMENT.md               # Deployment checklist and environment notes
+├── IMPLEMENTATION_STATUS.md    # High-level delivery tracking
+├── UPGRADE_SUMMARY.md          # Recent upgrade logs and findings
+├── progress.txt                # Running progress log for the hackathon
+└── README.md                   # Project overview and onboarding guide
 ```
+
+### Directory Details
+- **frontend/src/app**: Hosts the App Router pages plus layout, metadata, and API route handlers for the Next.js experience.
+- **frontend/src/components**: Houses composable UI primitives (wallet button, analytics cards, chat widgets) shared across routes.
+- **frontend/src/lib**: Contains configuration objects, client helpers, and typed API clients to keep hooks/pages lean.
+- **frontend/src/hooks**: Custom hooks for Privy authentication, wallet state management, viewport interactions, and feature toggles.
+- **backend/src/routes**: REST endpoints grouped by domain (analytics, security, notifications, transactions) that feed the frontend.
+- **backend/src/models**: Mongoose schemas describing ChainPilot entities such as `AuditLog`, `SecurityPolicy`, and `Team`.
+- **backend/src/middleware**: Cross-cutting Express middleware for auth, logging, throttling, firewall guardrails, and error handling.
+- **backend/src/config**: Connection bootstrapping for MongoDB, Cloudinary, blockchain RPC endpoints, and AI engines.
+- **backend/src/services**: Core engines (AI analysis, anomaly detection, notification delivery) that encapsulate business logic.
+- **root docs**: Reference materials like `DEPLOYMENT.md`, `IMPLEMENTATION_STATUS.md`, and `UPGRADE_SUMMARY.md` keep teammates aligned on deployment status.
 
 
 
